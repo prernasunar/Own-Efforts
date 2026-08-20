@@ -38,9 +38,15 @@ export const AuthView: React.FC = () => {
 
       console.warn('Google auth warning:', err);
       if (err?.code === 'auth/popup-blocked') {
-        setError('Popup was blocked by your browser. Please allow popups or use Instant Access below.');
+        setError('Popup was blocked by your browser. We are redirecting or you can tap 1-Click Access below.');
+      } else if (err?.code === 'auth/unauthorized-domain') {
+        setError('This preview domain is not in authorized domains yet. You can use 1-Click Instant Access below.');
+      } else if (err?.code === 'auth/network-request-failed') {
+        setError('Network connection error. Please check your internet connection and try again.');
+      } else if (err?.message?.includes('disallowed_useragent') || err?.message?.includes('webview')) {
+        setError('Google blocks sign-in inside embedded in-app browsers. Please tap 1-Click Instant Access below or open in Chrome/Safari.');
       } else {
-        setError(err.message || 'Google sign in failed. Please try again or use Instant 1-Click Access.');
+        setError(err.message || 'Google sign in could not complete. Please try again or use Instant 1-Click Access.');
       }
     } finally {
       setLoading(false);

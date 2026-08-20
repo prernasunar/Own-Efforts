@@ -3,6 +3,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
@@ -38,11 +40,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [isConfigured] = useState(isFirebaseConfigured());
 
-  // Initialize Auth state
+  // Initialize Auth state & handle mobile redirect result
   useEffect(() => {
     let unsubscribe = () => {};
 
     if (isConfigured && auth) {
+      // 1. Process any pending redirect results (crucial for mobile phones)
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result && result.user) {
+            const firebaseUser = result.user;
+            const savedRole = (localStorage.getItem('pending_auth_role') as UserRole) || 'Field Worker';
+            localStorage.removeItem('pending_auth_role');
+
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            try {
+              const userDoc = await getDoc(userDocRef);
+              if (userDoc.exists()) {
+                setUserProfile(userDoc.data() as UserProfile);
+              } else {
+                const profile: UserProfile = {
+                  uid: firebaseUser.uid,
+                  name: firebaseUser.displayName || 'Field Worker',
+                  email: firebaseUser.email || '',
+                  role: savedRole,
+                };
+                await setDoc(userDocRef, {
+                  name: profile.name,
+                  email: profile.email,
+                  role: savedRole,
+                  createdAt: serverTimestamp(),
+                });
+                setUserProfile(profile);
+              }
+            } catch (err) {
+              console.warn('Redirect profile save error:', err);
+              setUserProfile({
+                uid: firebaseUser.uid,
+                name: firebaseUser.displayName || 'Field Worker',
+                email: firebaseUser.email || '',
+                role: savedRole,
+              });
+            }
+            setUser(firebaseUser);
+          }
+        })
+        .catch((err) => {
+          const isCancelled =
+            err?.code === 'auth/user-cancelled' ||
+            err?.code === 'auth/popup-closed-by-user' ||
+            err?.code === 'auth/cancelled-popup-request';
+          if (!isCancelled) {
+            console.warn('Redirect result note:', err);
+          }
+        });
+
+      // 2. Active Auth state listener
       unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         if (currentUser) {
@@ -169,40 +222,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isConfigured && auth) {
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
-        const userCredential = await signInWithPopup(auth, provider);
-        const firebaseUser = userCredential.user;
+        const roleToAssign = preferredRole || 'Field Worker';
+        localStorage.setItem('pending_auth_role', roleToAssign);
 
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        const isMobile =
+          typeof navigator !== 'undefined' &&
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        let firebaseUser: User | null = null;
+
         try {
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as UserProfile);
-          } else {
-            const roleToAssign = preferredRole || 'Field Worker';
-            const profile: UserProfile = {
+          // Attempt popup sign-in
+          const userCredential = await signInWithPopup(auth, provider);
+          firebaseUser = userCredential.user;
+        } catch (popupError: any) {
+          const isCancellation =
+            popupError?.code === 'auth/user-cancelled' ||
+            popupError?.code === 'auth/popup-closed-by-user' ||
+            popupError?.code === 'auth/cancelled-popup-request';
+
+          if (isCancellation) {
+            console.debug('User cancelled Google popup');
+            return;
+          }
+
+          // If popup is blocked by mobile browser or not supported in iframe/environment, try redirect
+          const shouldTryRedirect =
+            popupError?.code === 'auth/popup-blocked' ||
+            popupError?.code === 'auth/operation-not-supported-in-this-environment' ||
+            popupError?.code === 'auth/cancelled-popup-request' ||
+            isMobile;
+
+          if (shouldTryRedirect) {
+            console.info('Switching to signInWithRedirect for mobile / blocked popup...');
+            try {
+              await signInWithRedirect(auth, provider);
+              return; // Browser will navigate to Google Auth and return via getRedirectResult
+            } catch (redirectError: any) {
+              console.warn('signInWithRedirect error:', redirectError);
+              throw redirectError;
+            }
+          }
+
+          throw popupError;
+        }
+
+        if (firebaseUser) {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          try {
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+              setUserProfile(userDoc.data() as UserProfile);
+            } else {
+              const profile: UserProfile = {
+                uid: firebaseUser.uid,
+                name: firebaseUser.displayName || 'Field Worker',
+                email: firebaseUser.email || '',
+                role: roleToAssign,
+              };
+              await setDoc(userDocRef, {
+                name: profile.name,
+                email: profile.email,
+                role: roleToAssign,
+                createdAt: serverTimestamp(),
+              });
+              setUserProfile(profile);
+            }
+          } catch (err) {
+            console.warn('Google sign in profile fetch/set note:', err);
+            setUserProfile({
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || 'Field Worker',
               email: firebaseUser.email || '',
               role: roleToAssign,
-            };
-            await setDoc(userDocRef, {
-              name: profile.name,
-              email: profile.email,
-              role: roleToAssign,
-              createdAt: serverTimestamp(),
             });
-            setUserProfile(profile);
           }
-        } catch (err) {
-          console.warn('Google sign in profile fetch/set note:', err);
-          setUserProfile({
-            uid: firebaseUser.uid,
-            name: firebaseUser.displayName || 'Field Worker',
-            email: firebaseUser.email || '',
-            role: preferredRole || 'Field Worker',
-          });
+          setUser(firebaseUser);
         }
-        setUser(firebaseUser);
       } else {
         // Local mode fallback
         const demoUid = 'google_' + Date.now().toString(36);
