@@ -1,0 +1,187 @@
+import React, { useRef, useState } from 'react';
+import { Camera, Image as ImageIcon, X, Loader2, Eye, Plus } from 'lucide-react';
+import { processFileList } from '../utils/imageUtils';
+
+interface PhotoUploaderProps {
+  photos: string[];
+  onChange: (photos: string[]) => void;
+  maxPhotos?: number;
+  onPreviewPhoto?: (index: number) => void;
+  disabled?: boolean;
+}
+
+export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
+  photos,
+  onChange,
+  maxPhotos = 4,
+  onPreviewPhoto,
+  disabled = false,
+}) => {
+  const [compressing, setCompressing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    if (photos.length >= maxPhotos) return;
+
+    setCompressing(true);
+    try {
+      const newImages = await processFileList(files, photos.length, maxPhotos);
+      if (newImages.length > 0) {
+        onChange([...photos, ...newImages].slice(0, maxPhotos));
+      }
+    } catch (err) {
+      console.error('Error processing photos:', err);
+    } finally {
+      setCompressing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+  };
+
+  const handleRemove = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = photos.filter((_, i) => i !== index);
+    onChange(updated);
+  };
+
+  const remaining = maxPhotos - photos.length;
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-bold text-stone-800 flex items-center space-x-1.5">
+          <Camera className="w-4 h-4 text-amber-600" />
+          <span>Site Photos (Max {maxPhotos})</span>
+        </label>
+        <span
+          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            photos.length >= maxPhotos
+              ? 'bg-emerald-100 text-emerald-800'
+              : 'bg-stone-100 text-stone-600'
+          }`}
+        >
+          {photos.length}/{maxPhotos} Photos
+        </span>
+      </div>
+
+      {/* Hidden File Inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        disabled={disabled || remaining <= 0}
+        onChange={(e) => handleFiles(e.target.files)}
+        className="hidden"
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        disabled={disabled || remaining <= 0}
+        onChange={(e) => handleFiles(e.target.files)}
+        className="hidden"
+      />
+
+      {/* Photo Grid & Uploader */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        {/* Existing Photos */}
+        {photos.map((photo, idx) => (
+          <div
+            key={idx}
+            onClick={() => onPreviewPhoto && onPreviewPhoto(idx)}
+            className="group relative aspect-square rounded-xl overflow-hidden border-2 border-stone-200 bg-stone-100 cursor-pointer shadow-xs hover:border-amber-400 transition-all"
+          >
+            <img
+              src={photo}
+              alt={`Site work photo ${idx + 1}`}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+              <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+            </div>
+
+            {/* Badge */}
+            <span className="absolute bottom-1.5 left-1.5 bg-stone-900/75 backdrop-blur-xs text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+              #{idx + 1}
+            </span>
+
+            {/* Delete button */}
+            {!disabled && (
+              <button
+                type="button"
+                onClick={(e) => handleRemove(idx, e)}
+                className="absolute top-1.5 right-1.5 p-1 rounded-full bg-rose-600/90 text-white hover:bg-rose-700 active:scale-95 shadow-md transition-transform"
+                title="Remove photo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+
+        {/* Add Photo Slot / Upload Trigger */}
+        {remaining > 0 && !disabled && (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              handleFiles(e.dataTransfer.files);
+            }}
+            className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-2 text-center transition-all cursor-pointer select-none ${
+              dragOver
+                ? 'border-amber-500 bg-amber-50/80 scale-[1.02]'
+                : 'border-stone-300 hover:border-amber-500 hover:bg-amber-50/50 bg-stone-50/60'
+            }`}
+          >
+            {compressing ? (
+              <div className="flex flex-col items-center space-y-1 text-amber-600">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span className="text-[11px] font-bold">Optimizing...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center space-y-1.5 w-full h-full">
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="p-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 active:scale-95 shadow-xs transition-transform"
+                    title="Open Camera"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 rounded-lg bg-stone-200 text-stone-700 hover:bg-stone-300 active:scale-95 transition-transform"
+                    title="Upload from Gallery"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="text-[11px] font-semibold text-stone-600">
+                  <span>Camera or Gallery</span>
+                  <div className="text-[10px] text-stone-400 font-normal">
+                    {remaining} slot{remaining > 1 ? 's' : ''} left
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-stone-500 flex items-center justify-between">
+        <span>📸 Tap camera to capture on site or select from gallery. Auto-optimized.</span>
+      </p>
+    </div>
+  );
+};

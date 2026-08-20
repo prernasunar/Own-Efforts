@@ -1,0 +1,6 @@
+{
+  "name": "Civil Site Work Logger",
+  "description": "Mobile-first Progressive Web App for civil engineering field teams to log daily site work with real-time cloud sync and manager monitoring.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

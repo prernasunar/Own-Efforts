@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role designation (Field Worker or Manager)",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Worker or Manager full name",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "description": "Role of the user",
+          "enum": ["Field Worker", "Manager"]
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 150
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when user profile was created"
+        }
+      },
+      "required": ["name", "role"]
+    },
+    "WorkType": {
+      "title": "WorkType",
+      "description": "Custom work items shared with the whole team",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the civil work item",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "uom": {
+          "type": "string",
+          "description": "Unit of measurement",
+          "enum": ["meter", "Number"]
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Name of the worker who created this type",
+          "maxLength": 100
+        },
+        "creatorUid": {
+          "type": "string",
+          "description": "Auth UID of the creator",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["name", "uom"]
+    },
+    "WorkEntry": {
+      "title": "WorkEntry",
+      "description": "Daily site work entry logged by field workers",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "UID of the field worker",
+          "maxLength": 128
+        },
+        "userName": {
+          "type": "string",
+          "description": "Name of the field worker",
+          "maxLength": 100
+        },
+        "workType": {
+          "type": "string",
+          "description": "Selected civil work item name",
+          "maxLength": 100
+        },
+        "uom": {
+          "type": "string",
+          "description": "Unit of measurement",
+          "enum": ["meter", "Number"]
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity completed"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of work entry",
+          "enum": ["Pending", "Done"]
+        },
+        "locationFrom": {
+          "type": "string",
+          "description": "Start location or GPS coordinate",
+          "maxLength": 300
+        },
+        "locationTo": {
+          "type": "string",
+          "description": "End location or GPS coordinate",
+          "maxLength": 300
+        },
+        "remark": {
+          "type": "string",
+          "description": "Optional site remark or notes",
+          "maxLength": 1000
+        },
+        "photos": {
+          "type": "array",
+          "description": "Up to 4 site work photos (base64 compressed data URLs or URLs)",
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": ["uid", "userName", "workType", "uom", "quantity", "status", "locationFrom", "locationTo"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile with role designation"
+    },
+    "/workTypes/{id}": {
+      "schema": "WorkType",
+      "description": "Custom work items added by team members"
+    },
+    "/entries/{entryId}": {
+      "schema": "WorkEntry",
+      "description": "Daily site work entries logged by field workers"
+    }
+  }
+}

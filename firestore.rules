@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isManager() {
+      return isSignedIn() && getUserRole() == 'Manager';
+    }
+
+    // Users Collection Rules
+    function isValidUser(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.role in ['Field Worker', 'Manager'] &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150));
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isManager());
+      allow list: if isSignedIn() && isManager();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'email']);
+      allow delete: if false;
+    }
+
+    // Work Types Collection Rules (Shared across team)
+    function isValidWorkType(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.uom in ['meter', 'Number'] &&
+             (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 100)) &&
+             (!('creatorUid' in data) || (data.creatorUid is string && data.creatorUid == request.auth.uid));
+    }
+
+    match /workTypes/{typeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidWorkType(incoming());
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Entries Collection Rules
+    function isValidWorkEntry(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() <= 100 &&
+             data.workType is string && data.workType.size() > 0 && data.workType.size() <= 100 &&
+             data.uom in ['meter', 'Number'] &&
+             data.quantity is number && data.quantity > 0 &&
+             data.status in ['Pending', 'Done'] &&
+             data.locationFrom is string && data.locationFrom.size() > 0 && data.locationFrom.size() <= 300 &&
+             data.locationTo is string && data.locationTo.size() > 0 && data.locationTo.size() <= 300 &&
+             (!('remark' in data) || (data.remark is string && data.remark.size() <= 1000)) &&
+             (!('photos' in data) || (data.photos is list && data.photos.size() <= 4));
+    }
+
+    match /entries/{entryId} {
+      // Read: Workers can read their own entries or managers can read all
+      allow read: if isSignedIn();
+      
+      // Create: Field workers create entries with their own UID stamped
+      allow create: if isSignedIn() && isValidWorkEntry(incoming());
+
+      // Update: Field workers can edit only their own entries
+      allow update: if isSignedIn() &&
+                    existing().uid == request.auth.uid &&
+                    incoming().uid == existing().uid &&
+                    incoming().userName == existing().userName &&
+                    isValidWorkEntry(incoming()) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'status', 'locationFrom', 'locationTo', 'remark', 'photos', 'updatedAt']);
+
+      // Delete: Field workers can delete only their own entries (Managers cannot delete workers' entries)
+      allow delete: if isSignedIn() && existing().uid == request.auth.uid;
+    }
+  }
+}
