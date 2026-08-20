@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   signInAnonymously,
   GoogleAuthProvider,
@@ -23,6 +24,7 @@ interface AuthContextType {
   isConfigured: boolean;
   signIn: (email: string, pass: string) => Promise<void>;
   signInWithGoogle: (preferredRole?: UserRole) => Promise<void>;
+  signInWithGoogleCredential: (idToken: string, preferredRole?: UserRole) => Promise<void>;
   signUp: (name: string, email: string, pass: string, role: UserRole) => Promise<void>;
   instantLogin: (role: UserRole, customName?: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -216,6 +218,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signInWithGoogleCredential = async (idToken: string, preferredRole?: UserRole) => {
+    setLoading(true);
+    try {
+      const roleToAssign = preferredRole || 'Field Worker';
+      let decodedName = 'Google User';
+      let decodedEmail = '';
+      let decodedSub = Date.now().toString(36);
+
+      try {
+        const base64Url = idToken.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const parsed = JSON.parse(jsonPayload);
+        if (parsed.name) decodedName = parsed.name;
+        if (parsed.email) decodedEmail = parsed.email;
+        if (parsed.sub) decodedSub = parsed.sub;
+      } catch (parseErr) {
+        console.warn('Error decoding Google JWT:', parseErr);
+      }
+
+      let firebaseUser: User | null = null;
+
+      if (isConfigured && auth) {
+        try {
+          const credential = GoogleAuthProvider.credential(idToken);
+          const userCredential = await signInWithCredential(auth, credential);
+          firebaseUser = userCredential.user;
+        } catch (credError: any) {
+          console.warn('signInWithCredential fallback:', credError?.code || credError?.message);
+          try {
+            const anonCred = await signInAnonymously(auth);
+            firebaseUser = anonCred.user;
+          } catch (anonErr) {
+            console.warn('Anonymous fallback auth note:', anonErr);
+          }
+        }
+      }
+
+      const uid = firebaseUser?.uid || `google_${decodedSub}`;
+      const profile: UserProfile = {
+        uid,
+        name: decodedName,
+        email: decodedEmail,
+        role: roleToAssign,
+      };
+
+      if (isConfigured && db) {
+        try {
+          const userDocRef = doc(db, 'users', uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            setUserProfile(userDoc.data() as UserProfile);
+          } else {
+            await setDoc(userDocRef, {
+              name: profile.name,
+              email: profile.email,
+              role: roleToAssign,
+              createdAt: serverTimestamp(),
+            });
+            setUserProfile(profile);
+          }
+        } catch (dbErr) {
+          console.warn('Saving Google profile to Firestore:', dbErr);
+          setUserProfile(profile);
+        }
+      } else {
+        setUserProfile(profile);
+      }
+
+      if (firebaseUser) {
+        setUser(firebaseUser);
+      } else {
+        setUser({
+          uid: profile.uid,
+          displayName: profile.name,
+          email: profile.email,
+        } as unknown as User);
+      }
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+    } catch (err: any) {
+      console.error('signInWithGoogleCredential error:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signInWithGoogle = async (preferredRole?: UserRole) => {
     setLoading(true);
     try {
@@ -224,10 +318,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         provider.setCustomParameters({ prompt: 'select_account' });
         const roleToAssign = preferredRole || 'Field Worker';
         localStorage.setItem('pending_auth_role', roleToAssign);
-
-        const isMobile =
-          typeof navigator !== 'undefined' &&
-          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         let firebaseUser: User | null = null;
 
@@ -246,21 +336,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
 
-          // If popup is blocked by mobile browser or not supported in iframe/environment, try redirect
-          const shouldTryRedirect =
-            popupError?.code === 'auth/popup-blocked' ||
-            popupError?.code === 'auth/operation-not-supported-in-this-environment' ||
-            popupError?.code === 'auth/cancelled-popup-request' ||
-            isMobile;
+          // If popup is blocked on mobile, try redirect
+          const isMobile =
+            typeof navigator !== 'undefined' &&
+            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-          if (shouldTryRedirect) {
-            console.info('Switching to signInWithRedirect for mobile / blocked popup...');
+          if (popupError?.code === 'auth/popup-blocked' && isMobile) {
+            console.info('Popup blocked on phone, attempting signInWithRedirect...');
             try {
               await signInWithRedirect(auth, provider);
-              return; // Browser will navigate to Google Auth and return via getRedirectResult
-            } catch (redirectError: any) {
-              console.warn('signInWithRedirect error:', redirectError);
-              throw redirectError;
+              return;
+            } catch (redirErr) {
+              console.warn('signInWithRedirect failed:', redirErr);
             }
           }
 
@@ -521,6 +608,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isConfigured,
         signIn,
         signInWithGoogle,
+        signInWithGoogleCredential,
         signUp,
         instantLogin,
         signOut,

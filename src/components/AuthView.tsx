@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 import { UserRole } from '../types';
 
 export const AuthView: React.FC = () => {
@@ -14,10 +14,13 @@ export const AuthView: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authTip, setAuthTip] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setAuthTip(null);
     setLoading(true);
+
     try {
       await signInWithGoogle(role);
     } catch (err: any) {
@@ -32,21 +35,22 @@ export const AuthView: React.FC = () => {
             err.message.includes('user-cancelled')));
 
       if (isCancellation) {
-        // User voluntarily closed the Google popup or declined permissions - no error message needed
         return;
       }
 
       console.warn('Google auth warning:', err);
-      if (err?.code === 'auth/popup-blocked') {
-        setError('Popup was blocked by your browser. We are redirecting or you can tap 1-Click Access below.');
-      } else if (err?.code === 'auth/unauthorized-domain') {
-        setError('This preview domain is not in authorized domains yet. You can use 1-Click Instant Access below.');
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        setAuthTip(
+          'Google popup closed because this preview URL is not in Firebase Auth Authorized Domains. You can use 1-Click Instant Access below to sign in immediately without restrictions.'
+        );
+      } else if (err?.code === 'auth/popup-blocked') {
+        setError('Popup was blocked by your mobile browser. Please allow popups or use 1-Click Instant Access below.');
       } else if (err?.code === 'auth/network-request-failed') {
-        setError('Network connection error. Please check your internet connection and try again.');
+        setError('Network connection error. Please check your internet connection.');
       } else if (err?.message?.includes('disallowed_useragent') || err?.message?.includes('webview')) {
-        setError('Google blocks sign-in inside embedded in-app browsers. Please tap 1-Click Instant Access below or open in Chrome/Safari.');
+        setError('Google blocks sign-in inside in-app browsers. Please tap 1-Click Instant Access below or open in Chrome/Safari.');
       } else {
-        setError(err.message || 'Google sign in could not complete. Please try again or use Instant 1-Click Access.');
+        setError(err.message || 'Google sign-in could not complete. Please use Instant 1-Click Access below.');
       }
     } finally {
       setLoading(false);
@@ -169,9 +173,72 @@ export const AuthView: React.FC = () => {
           {error && (
             <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start space-x-2.5">
               <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600 mt-0.5" />
-              <span className="font-medium">{error}</span>
+              <div className="flex-1">
+                <p className="font-semibold text-rose-900">Sign In Issue</p>
+                <p className="text-xs text-rose-700 mt-0.5">{error}</p>
+                <div className="mt-2.5 flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => handleInstantAccess(role)}
+                    className="text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-md shadow-xs"
+                  >
+                    Enter as {role} (Instant Access)
+                  </button>
+                </div>
+              </div>
             </div>
           )}
+
+          {authTip && (
+            <div className="mb-5 p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-sm flex items-start space-x-2.5">
+              <Sparkles className="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-amber-900">Domain Note</p>
+                <p className="text-xs text-amber-800 mt-0.5">{authTip}</p>
+                <button
+                  type="button"
+                  onClick={() => handleInstantAccess(role)}
+                  className="mt-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg shadow-xs flex items-center space-x-1"
+                >
+                  <span>Continue with 1-Click Instant Access</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Role Selection for Google & Quick Access */}
+          <div className="mb-4">
+            <label className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-2">
+              Sign In As:
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRole('Field Worker')}
+                className={`py-2 px-3 rounded-xl border-2 text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${
+                  role === 'Field Worker'
+                    ? 'border-amber-600 bg-amber-50 text-amber-900 shadow-xs'
+                    : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
+                }`}
+              >
+                <HardHat className="w-4 h-4 text-amber-600" />
+                <span>Field Worker</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('Manager')}
+                className={`py-2 px-3 rounded-xl border-2 text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${
+                  role === 'Manager'
+                    ? 'border-amber-600 bg-amber-50 text-amber-900 shadow-xs'
+                    : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
+                }`}
+              >
+                <Users className="w-4 h-4 text-amber-600" />
+                <span>Manager</span>
+              </button>
+            </div>
+          </div>
 
           {/* One-Click Google Sign In */}
           <button
