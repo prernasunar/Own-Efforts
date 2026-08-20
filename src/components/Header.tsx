@@ -1,13 +1,9 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { HardHat, Users, LogOut, RefreshCw, KeyRound } from 'lucide-react';
+import { HardHat, Users, LogOut } from 'lucide-react';
 import { UserRole } from '../types';
 
-interface HeaderProps {
-  onOpenConfig?: () => void;
-}
-
-export const Header: React.FC<HeaderProps> = ({ onOpenConfig }) => {
+export const Header: React.FC = () => {
   const { userProfile, signOut, updateUserRole, isConfigured } = useAuth();
 
   const handleToggleRole = () => {
@@ -58,21 +54,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenConfig }) => {
               </>
             )}
           </button>
-
-          {/* Firebase Settings button */}
-          {onOpenConfig && (
-            <button
-              onClick={onOpenConfig}
-              title="Firebase Settings"
-              className={`p-2 rounded-lg text-white transition-colors border ${
-                isConfigured
-                  ? 'bg-amber-700/50 hover:bg-amber-700 border-amber-400/30'
-                  : 'bg-amber-800 hover:bg-amber-900 border-amber-300'
-              }`}
-            >
-              <KeyRound className="w-4 h-4" />
-            </button>
-          )}
 
           {/* Sign Out */}
           <button

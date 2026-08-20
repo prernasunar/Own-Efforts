@@ -14,7 +14,7 @@ export interface FirebaseConfigType {
 }
 
 // Active Firebase Configuration from provisioned cloud applet config
-export const DEFAULT_FIREBASE_CONFIG: FirebaseConfigType = {
+export const FIREBASE_CONFIG: FirebaseConfigType = {
   apiKey: firebaseAppletConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: firebaseAppletConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
   projectId: firebaseAppletConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
@@ -24,44 +24,20 @@ export const DEFAULT_FIREBASE_CONFIG: FirebaseConfigType = {
   firestoreDatabaseId: firebaseAppletConfig.firestoreDatabaseId || undefined,
 };
 
-const STORAGE_KEY = 'civil_site_firebase_config';
-
-export function getSavedFirebaseConfig(): FirebaseConfigType {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.apiKey && !parsed.apiKey.includes('YOUR_FIREBASE_API_KEY')) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Error reading saved firebase config', e);
-  }
-  return DEFAULT_FIREBASE_CONFIG;
-}
-
-export function saveFirebaseConfig(config: FirebaseConfigType): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  window.location.reload();
-}
-
 export function isFirebaseConfigured(): boolean {
-  const config = getSavedFirebaseConfig();
-  return Boolean(config.apiKey && config.projectId);
+  return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
 }
 
 let app: FirebaseApp;
 if (getApps().length === 0) {
-  app = initializeApp(getSavedFirebaseConfig());
+  app = initializeApp(FIREBASE_CONFIG);
 } else {
   app = getApp();
 }
 
-const config = getSavedFirebaseConfig();
 // Initialize Firestore with specific database ID if provided in config
-export const db: Firestore = config.firestoreDatabaseId
-  ? getFirestore(app, config.firestoreDatabaseId)
+export const db: Firestore = FIREBASE_CONFIG.firestoreDatabaseId
+  ? getFirestore(app, FIREBASE_CONFIG.firestoreDatabaseId)
   : getFirestore(app);
 export const auth: Auth = getAuth(app);
 export const appInstance = app;

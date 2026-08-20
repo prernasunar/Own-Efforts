@@ -1,16 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkDataProvider } from './context/WorkDataContext';
 import { Header } from './components/Header';
 import { AuthView } from './components/AuthView';
 import { FieldWorkerDashboard } from './components/FieldWorkerDashboard';
 import { ManagerDashboard } from './components/ManagerDashboard';
-import { FirebaseConfigModal } from './components/FirebaseConfigModal';
 import { Loader2 } from 'lucide-react';
 
 const MainApp: React.FC = () => {
   const { user, userProfile, loading } = useAuth();
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   if (loading) {
     return (
@@ -30,7 +28,7 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 font-sans flex flex-col">
-      <Header onOpenConfig={() => setIsConfigOpen(true)} />
+      <Header />
 
       <main className="flex-1 pb-16">
         {userProfile.role === 'Manager' ? (
@@ -49,12 +47,6 @@ const MainApp: React.FC = () => {
           <span className="text-stone-500">Civil Engineering Site Ops PWA</span>
         </div>
       </footer>
-
-      {/* Firebase Keys Configuration Modal */}
-      <FirebaseConfigModal
-        isOpen={isConfigOpen}
-        onClose={() => setIsConfigOpen(false)}
-      />
     </div>
   );
 };
