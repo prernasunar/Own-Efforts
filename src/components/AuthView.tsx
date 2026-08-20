@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, CheckCircle2, Database } from 'lucide-react';
 import { UserRole } from '../types';
+import { SupabaseConfigModal } from './SupabaseConfigModal';
 
 export const AuthView: React.FC = () => {
   const { signIn, signUp, signInWithGoogle, instantLogin } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -85,13 +87,13 @@ export const AuthView: React.FC = () => {
         }
         await signUp(name.trim(), email.trim(), password, role);
       } else {
-        await signIn(email.trim(), password);
+        await signIn(email.trim(), password, true, role);
       }
     } catch (err: any) {
       console.error('Auth error:', err);
       let msg = err.message || 'Authentication failed. Please check credentials.';
       if (msg.includes('auth/operation-not-allowed')) {
-        msg = 'Email/Password sign-in is disabled in Firebase Console. You can use Instant 1-Click Access below, or enable Email/Password under Firebase Console > Authentication > Sign-in method.';
+        msg = 'Email/Password sign-in is disabled. You can use Instant 1-Click Access below.';
       } else if (msg.includes('auth/invalid-credential') || msg.includes('auth/user-not-found') || msg.includes('auth/wrong-password')) {
         msg = 'Invalid email or password. Please check your credentials or create an account.';
       } else if (msg.includes('auth/email-already-in-use')) {
@@ -415,10 +417,19 @@ export const AuthView: React.FC = () => {
 
           {/* Instant 1-Click Access for Evaluation & Offline Test */}
           <div className="mt-6 pt-5 border-t border-stone-200">
-            <p className="text-xs font-bold text-stone-600 uppercase tracking-wider mb-2.5 flex items-center space-x-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>Instant 1-Click Access</span>
-            </p>
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-xs font-bold text-stone-600 uppercase tracking-wider flex items-center space-x-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>Instant 1-Click Access</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowSupabaseModal(true)}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 flex items-center space-x-1"
+              >
+                <span>Supabase Setup</span>
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <button
                 type="button"
@@ -460,6 +471,11 @@ export const AuthView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <SupabaseConfigModal
+        isOpen={showSupabaseModal}
+        onClose={() => setShowSupabaseModal(false)}
+      />
     </div>
   );
 };

@@ -42,24 +42,17 @@ export const db: Firestore = FIREBASE_CONFIG.firestoreDatabaseId
 export const auth: Auth = getAuth(app);
 export const appInstance = app;
 
-// Test connection on boot as mandated by Firestore guidelines
-async function testConnection() {
+// Safe lazy connection checker
+export async function checkFirestoreConnection() {
+  if (!db) return false;
   try {
-    if (db) {
-      await getDocFromServer(doc(db, 'test', 'connection'));
-    }
-  } catch (error) {
-    // Gracefully handle initial offline / unavailable handshake states
-    if (error instanceof Error) {
-      if (error.message.includes('the client is offline') || error.message.includes('unavailable')) {
-        // Expected when connection is still initializing or offline
-      } else {
-        console.debug('Firestore connection initial probe:', error.message);
-      }
-    }
+    const { getDoc } = await import('firebase/firestore');
+    await getDoc(doc(db, 'test', 'connection'));
+    return true;
+  } catch {
+    return false;
   }
 }
-testConnection();
 
 export enum OperationType {
   CREATE = 'create',

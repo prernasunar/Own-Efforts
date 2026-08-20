@@ -1,30 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  signInWithCredential,
-  getRedirectResult,
-  signInAnonymously,
-  GoogleAuthProvider,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  User,
-  updateProfile,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType, isFirebaseConfigured } from '../lib/firebase';
 import { UserProfile, UserRole } from '../types';
+import { getSupabaseClient, isSupabaseConfigured, supabaseDb } from '../lib/supabase';
 
 interface AuthContextType {
-  user: User | null;
+  user: any | null;
   userProfile: UserProfile | null;
   loading: boolean;
   isConfigured: boolean;
-  signIn: (email: string, pass: string) => Promise<void>;
+  backendProvider: 'supabase' | 'local';
+  signIn: (email: string, pass: string, autoRegister?: boolean, role?: UserRole) => Promise<void>;
   signInWithGoogle: (preferredRole?: UserRole) => Promise<void>;
-  signInWithGoogleCredential: (idToken: string, preferredRole?: UserRole) => Promise<void>;
   signUp: (name: string, email: string, pass: string, role: UserRole) => Promise<void>;
   instantLogin: (role: UserRole, customName?: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -37,390 +22,155 @@ const LOCAL_USER_KEY = 'civil_site_active_user';
 const LOCAL_USERS_DB_KEY = 'civil_site_users_db';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isConfigured] = useState(isFirebaseConfigured());
 
-  // Initialize Auth state & handle mobile redirect result
+  const supabaseClient = getSupabaseClient();
+  const isSupabase = isSupabaseConfigured() && Boolean(supabaseClient);
+
+  const backendProvider: 'supabase' | 'local' = isSupabase ? 'supabase' : 'local';
+
   useEffect(() => {
-    let unsubscribe = () => {};
+    let isMounted = true;
 
-    if (isConfigured && auth) {
-      // 1. Process any pending redirect results (crucial for mobile phones)
-      getRedirectResult(auth)
-        .then(async (result) => {
-          if (result && result.user) {
-            const firebaseUser = result.user;
-            const savedRole = (localStorage.getItem('pending_auth_role') as UserRole) || 'Field Worker';
-            localStorage.removeItem('pending_auth_role');
-
-            const userDocRef = doc(db, 'users', firebaseUser.uid);
-            try {
-              const userDoc = await getDoc(userDocRef);
-              if (userDoc.exists()) {
-                setUserProfile(userDoc.data() as UserProfile);
-              } else {
-                const profile: UserProfile = {
-                  uid: firebaseUser.uid,
-                  name: firebaseUser.displayName || 'Field Worker',
-                  email: firebaseUser.email || '',
-                  role: savedRole,
-                };
-                await setDoc(userDocRef, {
-                  name: profile.name,
-                  email: profile.email,
-                  role: savedRole,
-                  createdAt: serverTimestamp(),
-                });
-                setUserProfile(profile);
-              }
-            } catch (err) {
-              console.warn('Redirect profile save error:', err);
-              setUserProfile({
-                uid: firebaseUser.uid,
-                name: firebaseUser.displayName || 'Field Worker',
-                email: firebaseUser.email || '',
-                role: savedRole,
-              });
-            }
-            setUser(firebaseUser);
+    const initAuth = async () => {
+      // 1. Check Supabase Auth session
+      if (isSupabase && supabaseClient) {
+        try {
+          const { data } = await supabaseClient.auth.getSession();
+          if (data.session?.user && isMounted) {
+            const sbUser = data.session.user;
+            const profile = await supabaseDb.getProfile(sbUser.id);
+            const resolvedProfile: UserProfile = profile || {
+              uid: sbUser.id,
+              name: sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || 'User',
+              email: sbUser.email || '',
+              role: (sbUser.user_metadata?.role as UserRole) || 'Field Worker',
+            };
+            setUser(sbUser);
+            setUserProfile(resolvedProfile);
+            setLoading(false);
+            return;
           }
-        })
-        .catch((err) => {
-          const isCancelled =
-            err?.code === 'auth/user-cancelled' ||
-            err?.code === 'auth/popup-closed-by-user' ||
-            err?.code === 'auth/cancelled-popup-request';
-          if (!isCancelled) {
-            console.warn('Redirect result note:', err);
-          }
-        });
-
-      // 2. Active Auth state listener
-      unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-          try {
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists()) {
-              setUserProfile(userDoc.data() as UserProfile);
-            } else {
-              // Fallback profile if doc was not created yet
-              const defaultProf: UserProfile = {
-                uid: currentUser.uid,
-                name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Worker',
-                email: currentUser.email || '',
-                role: 'Field Worker',
-              };
-              setUserProfile(defaultProf);
-            }
-          } catch (e) {
-            console.error('Error fetching user profile:', e);
-          }
-        } else {
-          setUserProfile(null);
+        } catch (err) {
+          console.warn('Supabase session check error:', err);
         }
-        setLoading(false);
-      });
-    } else {
-      // Local demo mode for unconfigured Firebase instances
+      }
+
+      // 2. Check Saved Local Session
       const savedUser = localStorage.getItem(LOCAL_USER_KEY);
-      if (savedUser) {
+      if (savedUser && isMounted) {
         try {
           const parsed = JSON.parse(savedUser);
-          setUser({
-            uid: parsed.uid,
-            email: parsed.email,
-            displayName: parsed.name,
-          } as unknown as User);
+          setUser({ uid: parsed.uid, email: parsed.email, displayName: parsed.name });
           setUserProfile(parsed);
+          setLoading(false);
+          return;
         } catch {
           localStorage.removeItem(LOCAL_USER_KEY);
         }
       }
-      setLoading(false);
-    }
 
-    return () => unsubscribe();
-  }, [isConfigured]);
+      if (isMounted) setLoading(false);
+    };
 
-  const signIn = async (email: string, pass: string) => {
+    initAuth();
+  }, [isSupabase]);
+
+  const signIn = async (email: string, pass: string, autoRegister: boolean = true, defaultRole: UserRole = 'Field Worker') => {
     setLoading(true);
+    const cleanEmail = email.trim();
     try {
-      if (isConfigured && auth) {
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-          const userDocRef = doc(db, 'users', userCredential.user.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as UserProfile);
-          } else {
-            const roleFallback: UserRole = email.toLowerCase().includes('manager') ? 'Manager' : 'Field Worker';
+      if (isSupabase && supabaseClient) {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+          email: cleanEmail,
+          password: pass,
+        });
+
+        if (error) {
+          // If login credentials invalid, seamlessly try to auto-sign-up if autoRegister is true
+          if (error.message.includes('Invalid login credentials') && autoRegister) {
+            try {
+              const guessedName = cleanEmail.split('@')[0];
+              const formattedName = guessedName.charAt(0).toUpperCase() + guessedName.slice(1);
+              const signUpResult = await supabaseClient.auth.signUp({
+                email: cleanEmail,
+                password: pass,
+                options: { data: { name: formattedName, role: defaultRole } },
+              });
+
+              if (signUpResult.data.user) {
+                const profile: UserProfile = {
+                  uid: signUpResult.data.user.id,
+                  name: formattedName,
+                  email: cleanEmail,
+                  role: defaultRole,
+                };
+                await supabaseDb.upsertProfile(profile);
+                setUser(signUpResult.data.user);
+                setUserProfile(profile);
+                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+                return;
+              }
+            } catch (autoErr) {
+              console.warn('Auto registration attempt during sign-in failed:', autoErr);
+            }
+            throw new Error(
+              'Invalid password or account not found. If this is your first time signing in, click "Create Account" or use 1-Click Instant Access below.'
+            );
+          } else if (error.message.includes('Email not confirmed')) {
+            // If email is not confirmed, grant seamless entry with local profile while Supabase confirmation is pending
             const profile: UserProfile = {
-              uid: userCredential.user.uid,
-              name: userCredential.user.displayName || email.split('@')[0],
-              email: userCredential.user.email || email,
-              role: roleFallback,
+              uid: 'sb_pending_' + Math.random().toString(36).substring(2, 9),
+              name: cleanEmail.split('@')[0],
+              email: cleanEmail,
+              role: defaultRole,
             };
+            setUser({ uid: profile.uid, email: cleanEmail, displayName: profile.name });
             setUserProfile(profile);
-          }
-          return;
-        } catch (firebaseErr: any) {
-          if (firebaseErr?.code === 'auth/operation-not-allowed') {
-            console.warn('Firebase Email/Password provider not enabled. Falling back to local authenticated session.');
-            // Fall through to local session creation
-          } else {
-            throw firebaseErr;
-          }
-        }
-      }
-
-      // Local / Offline session fallback
-      const existingUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
-      const found = Object.values(existingUsers).find(
-        (u: any) => u.email?.toLowerCase() === email.toLowerCase()
-      ) as UserProfile | undefined;
-
-      if (found) {
-        setUser({
-          uid: found.uid,
-          email: found.email,
-          displayName: found.name,
-        } as unknown as User);
-        setUserProfile(found);
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(found));
-      } else {
-        // Create instant session profile
-        const demoUid = 'user_' + Math.random().toString(36).substring(2, 9);
-        const newProfile: UserProfile = {
-          uid: demoUid,
-          name: email.split('@')[0],
-          email,
-          role: email.toLowerCase().includes('manager') ? 'Manager' : 'Field Worker',
-        };
-        existingUsers[demoUid] = newProfile;
-        localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(existingUsers));
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(newProfile));
-        setUser({
-          uid: demoUid,
-          email,
-          displayName: newProfile.name,
-        } as unknown as User);
-        setUserProfile(newProfile);
-      }
-    } catch (error) {
-      console.error('Sign In Error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signInWithGoogleCredential = async (idToken: string, preferredRole?: UserRole) => {
-    setLoading(true);
-    try {
-      const roleToAssign = preferredRole || 'Field Worker';
-      let decodedName = 'Google User';
-      let decodedEmail = '';
-      let decodedSub = Date.now().toString(36);
-
-      try {
-        const base64Url = idToken.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-        );
-        const parsed = JSON.parse(jsonPayload);
-        if (parsed.name) decodedName = parsed.name;
-        if (parsed.email) decodedEmail = parsed.email;
-        if (parsed.sub) decodedSub = parsed.sub;
-      } catch (parseErr) {
-        console.warn('Error decoding Google JWT:', parseErr);
-      }
-
-      let firebaseUser: User | null = null;
-
-      if (isConfigured && auth) {
-        try {
-          const credential = GoogleAuthProvider.credential(idToken);
-          const userCredential = await signInWithCredential(auth, credential);
-          firebaseUser = userCredential.user;
-        } catch (credError: any) {
-          console.warn('signInWithCredential fallback:', credError?.code || credError?.message);
-          try {
-            const anonCred = await signInAnonymously(auth);
-            firebaseUser = anonCred.user;
-          } catch (anonErr) {
-            console.warn('Anonymous fallback auth note:', anonErr);
-          }
-        }
-      }
-
-      const uid = firebaseUser?.uid || `google_${decodedSub}`;
-      const profile: UserProfile = {
-        uid,
-        name: decodedName,
-        email: decodedEmail,
-        role: roleToAssign,
-      };
-
-      if (isConfigured && db) {
-        try {
-          const userDocRef = doc(db, 'users', uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as UserProfile);
-          } else {
-            await setDoc(userDocRef, {
-              name: profile.name,
-              email: profile.email,
-              role: roleToAssign,
-              createdAt: serverTimestamp(),
-            });
-            setUserProfile(profile);
-          }
-        } catch (dbErr) {
-          console.warn('Saving Google profile to Firestore:', dbErr);
-          setUserProfile(profile);
-        }
-      } else {
-        setUserProfile(profile);
-      }
-
-      if (firebaseUser) {
-        setUser(firebaseUser);
-      } else {
-        setUser({
-          uid: profile.uid,
-          displayName: profile.name,
-          email: profile.email,
-        } as unknown as User);
-      }
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-    } catch (err: any) {
-      console.error('signInWithGoogleCredential error:', err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signInWithGoogle = async (preferredRole?: UserRole) => {
-    setLoading(true);
-    try {
-      if (isConfigured && auth) {
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        const roleToAssign = preferredRole || 'Field Worker';
-        localStorage.setItem('pending_auth_role', roleToAssign);
-
-        let firebaseUser: User | null = null;
-
-        try {
-          // Attempt popup sign-in
-          const userCredential = await signInWithPopup(auth, provider);
-          firebaseUser = userCredential.user;
-        } catch (popupError: any) {
-          const isCancellation =
-            popupError?.code === 'auth/user-cancelled' ||
-            popupError?.code === 'auth/popup-closed-by-user' ||
-            popupError?.code === 'auth/cancelled-popup-request';
-
-          if (isCancellation) {
-            console.debug('User cancelled Google popup');
+            localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
             return;
           }
-
-          // If popup is blocked on mobile, try redirect
-          const isMobile =
-            typeof navigator !== 'undefined' &&
-            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-          if (popupError?.code === 'auth/popup-blocked' && isMobile) {
-            console.info('Popup blocked on phone, attempting signInWithRedirect...');
-            try {
-              await signInWithRedirect(auth, provider);
-              return;
-            } catch (redirErr) {
-              console.warn('signInWithRedirect failed:', redirErr);
-            }
-          }
-
-          throw popupError;
+          throw new Error(error.message);
         }
 
-        if (firebaseUser) {
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          try {
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists()) {
-              setUserProfile(userDoc.data() as UserProfile);
-            } else {
-              const profile: UserProfile = {
-                uid: firebaseUser.uid,
-                name: firebaseUser.displayName || 'Field Worker',
-                email: firebaseUser.email || '',
-                role: roleToAssign,
-              };
-              await setDoc(userDocRef, {
-                name: profile.name,
-                email: profile.email,
-                role: roleToAssign,
-                createdAt: serverTimestamp(),
-              });
-              setUserProfile(profile);
-            }
-          } catch (err) {
-            console.warn('Google sign in profile fetch/set note:', err);
-            setUserProfile({
-              uid: firebaseUser.uid,
-              name: firebaseUser.displayName || 'Field Worker',
-              email: firebaseUser.email || '',
-              role: roleToAssign,
-            });
+        if (data.user) {
+          let profile = await supabaseDb.getProfile(data.user.id);
+          if (!profile) {
+            profile = {
+              uid: data.user.id,
+              name: data.user.user_metadata?.name || cleanEmail.split('@')[0],
+              email: data.user.email || cleanEmail,
+              role: (data.user.user_metadata?.role as UserRole) || defaultRole,
+            };
+            await supabaseDb.upsertProfile(profile);
           }
-          setUser(firebaseUser);
+          setUser(data.user);
+          setUserProfile(profile);
+          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+          return;
         }
-      } else {
-        // Local mode fallback
-        const demoUid = 'google_' + Date.now().toString(36);
-        const profile: UserProfile = {
-          uid: demoUid,
-          name: 'Demo Google User',
-          email: 'google.user@civilsite.com',
-          role: preferredRole || 'Field Worker',
-        };
-        setUser({
-          uid: demoUid,
-          displayName: profile.name,
-          email: profile.email,
-        } as unknown as User);
-        setUserProfile(profile);
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-      }
-    } catch (error: any) {
-      const isCancellation =
-        error?.code === 'auth/user-cancelled' ||
-        error?.code === 'auth/popup-closed-by-user' ||
-        error?.code === 'auth/cancelled-popup-request' ||
-        (typeof error?.message === 'string' &&
-          (error.message.includes('auth/user-cancelled') ||
-            error.message.includes('auth/popup-closed-by-user') ||
-            error.message.includes('auth/cancelled-popup-request') ||
-            error.message.includes('user-cancelled')));
-
-      if (isCancellation) {
-        console.debug('Google sign in was cancelled by user:', error?.code || error?.message);
-        return;
       }
 
-      console.warn('Google Sign In Error:', error);
-      throw error;
+      // Fallback local session (works seamlessly without backend required)
+      const existingUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
+      const found = Object.values(existingUsers).find(
+        (u: any) => u.email?.toLowerCase() === cleanEmail.toLowerCase()
+      ) as UserProfile | undefined;
+
+      const profile: UserProfile = found || {
+        uid: 'user_' + Math.random().toString(36).substring(2, 9),
+        name: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: defaultRole,
+      };
+
+      existingUsers[profile.uid] = profile;
+      localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(existingUsers));
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+      setUser({ uid: profile.uid, email: cleanEmail, displayName: profile.name });
+      setUserProfile(profile);
     } finally {
       setLoading(false);
     }
@@ -428,174 +178,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (name: string, email: string, pass: string, role: UserRole) => {
     setLoading(true);
+    const cleanEmail = email.trim();
+    const cleanName = name.trim();
     try {
-      if (isConfigured && auth) {
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-          const firebaseUser = userCredential.user;
-          await updateProfile(firebaseUser, { displayName: name });
+      if (isSupabase && supabaseClient) {
+        const { data, error } = await supabaseClient.auth.signUp({
+          email: cleanEmail,
+          password: pass,
+          options: { data: { name: cleanName, role } },
+        });
 
-          const profile: UserProfile = {
-            uid: firebaseUser.uid,
-            name,
-            email,
-            role,
-          };
-
-          const path = `users/${firebaseUser.uid}`;
-          try {
-            await setDoc(doc(db, 'users', firebaseUser.uid), {
-              name,
-              email,
-              role,
-              createdAt: serverTimestamp(),
-            });
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, path);
+        if (error) {
+          if (error.message.includes('User already registered')) {
+            // If already registered, try signing in with those credentials
+            return await signIn(cleanEmail, pass, false, role);
           }
+          throw new Error(error.message);
+        }
 
-          setUser(firebaseUser);
+        if (data.user) {
+          const profile: UserProfile = { uid: data.user.id, name: cleanName, email: cleanEmail, role };
+          await supabaseDb.upsertProfile(profile);
+          setUser(data.user);
           setUserProfile(profile);
+          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
           return;
-        } catch (firebaseErr: any) {
-          if (firebaseErr?.code === 'auth/operation-not-allowed') {
-            console.warn('Firebase Email/Password provider not enabled. Creating local authenticated profile.');
-            // Fall through to local profile creation
-          } else {
-            throw firebaseErr;
-          }
         }
       }
 
-      // Local session creation
-      const uid = 'user_' + Date.now().toString(36);
-      const profile: UserProfile = {
-        uid,
-        name,
-        email,
-        role,
-        createdAt: new Date().toISOString(),
-      };
-
+      // Local Registration
+      const uid = 'user_' + Math.random().toString(36).substring(2, 9);
+      const profile: UserProfile = { uid, name: cleanName, email: cleanEmail, role };
       const existingUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
       existingUsers[uid] = profile;
       localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(existingUsers));
       localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-
-      setUser({
-        uid,
-        email,
-        displayName: name,
-      } as unknown as User);
+      setUser({ uid, email: cleanEmail, displayName: cleanName });
       setUserProfile(profile);
-    } catch (error) {
-      console.error('Sign Up Error:', error);
-      throw error;
     } finally {
       setLoading(false);
     }
+  };
+
+  const signInWithGoogle = async (preferredRole?: UserRole) => {
+    const roleToAssign = preferredRole || 'Field Worker';
+    if (isSupabase && supabaseClient) {
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        },
+      });
+      if (error) throw new Error(error.message);
+      return;
+    }
+    // Instant fallback
+    await instantLogin(roleToAssign);
   };
 
   const instantLogin = async (role: UserRole, customName?: string) => {
-    setLoading(true);
-    try {
-      const isManagerRole = role === 'Manager';
-      const displayName = customName || (isManagerRole ? 'Vikram Singh (Manager)' : 'Rajesh Kumar (Field Worker)');
-      const email = isManagerRole ? 'manager@civilsite.com' : 'worker@civilsite.com';
-
-      // 1. Try Firebase Anonymous Auth if available
-      if (isConfigured && auth) {
-        try {
-          const anonCredential = await signInAnonymously(auth);
-          const firebaseUser = anonCredential.user;
-          await updateProfile(firebaseUser, { displayName });
-
-          const profile: UserProfile = {
-            uid: firebaseUser.uid,
-            name: displayName,
-            email,
-            role,
-            createdAt: new Date().toISOString(),
-          };
-
-          // Save user role in Firestore
-          try {
-            await setDoc(doc(db, 'users', firebaseUser.uid), {
-              name: profile.name,
-              email: profile.email,
-              role: profile.role,
-              createdAt: serverTimestamp(),
-            });
-          } catch (docErr) {
-            console.debug('User profile save note:', docErr);
-          }
-
-          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-          setUser(firebaseUser);
-          setUserProfile(profile);
-          return;
-        } catch (anonErr) {
-          console.debug('Firebase anonymous sign-in not active; using local session fallback:', anonErr);
-        }
-      }
-
-      // 2. Local session fallback
-      const uid = isManagerRole ? 'mgr_' + Date.now().toString(36) : 'wrk_' + Date.now().toString(36);
-      const profile: UserProfile = {
-        uid,
-        name: displayName,
-        email,
-        role,
-        createdAt: new Date().toISOString(),
-      };
-
-      const existingUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
-      existingUsers[uid] = profile;
-      localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(existingUsers));
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-
-      setUser({
-        uid,
-        email,
-        displayName,
-      } as unknown as User);
-      setUserProfile(profile);
-    } finally {
-      setLoading(false);
-    }
+    const uid = 'demo_' + role.toLowerCase().replace(' ', '_') + '_' + Math.random().toString(36).substring(2, 6);
+    const profile: UserProfile = {
+      uid,
+      name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Supervisor'),
+      email: `${role.toLowerCase().replace(' ', '.')}@site.work`,
+      role,
+    };
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+    setUser({ uid: profile.uid, email: profile.email, displayName: profile.name });
+    setUserProfile(profile);
   };
 
   const signOut = async () => {
-    try {
-      if (isConfigured && auth) {
-        await firebaseSignOut(auth);
-      }
-      localStorage.removeItem(LOCAL_USER_KEY);
-      setUser(null);
-      setUserProfile(null);
-    } catch (error) {
-      console.error('Sign Out Error:', error);
+    if (isSupabase && supabaseClient) {
+      await supabaseClient.auth.signOut().catch(() => {});
     }
+    localStorage.removeItem(LOCAL_USER_KEY);
+    setUser(null);
+    setUserProfile(null);
   };
 
-  const updateUserRole = async (newRole: UserRole) => {
+  const updateUserRole = async (role: UserRole) => {
     if (!userProfile) return;
-    const updated = { ...userProfile, role: newRole };
+    const updated = { ...userProfile, role };
     setUserProfile(updated);
-
-    if (isConfigured && db && user) {
-      try {
-        await setDoc(doc(db, 'users', user.uid), { role: newRole }, { merge: true });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
-      }
-    } else {
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(updated));
-      const existingUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
-      if (existingUsers[userProfile.uid]) {
-        existingUsers[userProfile.uid].role = newRole;
-        localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(existingUsers));
-      }
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(updated));
+    if (isSupabase) {
+      await supabaseDb.upsertProfile(updated);
     }
   };
 
@@ -605,10 +274,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         userProfile,
         loading,
-        isConfigured,
+        isConfigured: isSupabase,
+        backendProvider,
         signIn,
         signInWithGoogle,
-        signInWithGoogleCredential,
         signUp,
         instantLogin,
         signOut,
@@ -620,10 +289,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
