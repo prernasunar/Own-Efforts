@@ -25,6 +25,8 @@ import {
   X,
   Camera,
   Image as ImageIcon,
+  ArrowUpDown,
+  Copy,
 } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { formatSingleEntryText, formatWorkerBatchReportText } from '../utils/share';
@@ -33,6 +35,7 @@ import { EditEntryModal } from './EditEntryModal';
 import { ShareModal } from './ShareModal';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
+import { PhotoGpsData } from '../utils/photoGpsExtractor';
 
 export const FieldWorkerDashboard: React.FC = () => {
   const { userProfile, user } = useAuth();
@@ -48,6 +51,8 @@ export const FieldWorkerDashboard: React.FC = () => {
   const [locationTo, setLocationTo] = useState<string>('');
   const [remark, setRemark] = useState<string>('');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [lastDetectedGps, setLastDetectedGps] = useState<PhotoGpsData | null>(null);
+  const [gpsAutoFillNotice, setGpsAutoFillNotice] = useState<string | null>(null);
 
   // UI state
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -110,19 +115,49 @@ export const FieldWorkerDashboard: React.FC = () => {
     }
   };
 
+  const handleGpsExtracted = (gpsData: PhotoGpsData, photoIndex: number) => {
+    setLastDetectedGps(gpsData);
+    const loc = gpsData.formattedLocation;
+
+    if (photoIndex === 0) {
+      // First photo: Auto-fill both Location From and Location To
+      setLocationFrom(loc);
+      setLocationTo(loc);
+      setGpsAutoFillNotice(`📍 Auto-filled "Location From" and "Location To" with Photo GPS: ${loc}`);
+    } else {
+      // Second/Subsequent photo: Smartly auto-fills "Location To" (End point)
+      setLocationTo(loc);
+      setGpsAutoFillNotice(`📍 Updated "Location To" (End point) from Photo #${photoIndex + 1} GPS: ${loc}`);
+    }
+
+    setTimeout(() => {
+      setGpsAutoFillNotice(null);
+    }, 6000);
+  };
+
+  const handleApplyGpsToBoth = () => {
+    if (!lastDetectedGps) return;
+    setLocationFrom(lastDetectedGps.formattedLocation);
+    setLocationTo(lastDetectedGps.formattedLocation);
+  };
+
+  const handleCopyFromTo = () => {
+    if (locationFrom) {
+      setLocationTo(locationFrom);
+    }
+  };
+
+  const handleSwapFromTo = () => {
+    const temp = locationFrom;
+    setLocationFrom(locationTo);
+    setLocationTo(temp);
+  };
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = Number(quantity);
     if (isNaN(qtyNum) || qtyNum <= 0) {
       setFormError('Please enter a valid positive quantity.');
-      return;
-    }
-    if (!locationFrom.trim()) {
-      setFormError('Please specify "Location From" (use GPS or manual text).');
-      return;
-    }
-    if (!locationTo.trim()) {
-      setFormError('Please specify "Location To" (use GPS or manual text).');
       return;
     }
 
@@ -344,13 +379,71 @@ export const FieldWorkerDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* GPS Auto-fill Notification Banner */}
+          {gpsAutoFillNotice && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 flex items-center justify-between shadow-xs animate-fadeIn">
+              <div className="flex items-center space-x-2.5">
+                <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <p className="text-xs sm:text-sm font-bold">{gpsAutoFillNotice}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGpsAutoFillNotice(null)}
+                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* 3. GPS Location (From -> To) */}
           <div className="space-y-4 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+                Location & Chainage
+              </span>
+              <div className="flex items-center space-x-1.5">
+                {lastDetectedGps && (
+                  <button
+                    type="button"
+                    onClick={handleApplyGpsToBoth}
+                    title="Fill both Location From and To with Photo GPS"
+                    className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-lg border border-emerald-300 transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                    <span>Fill Both with Photo GPS</span>
+                  </button>
+                )}
+                {locationFrom && (
+                  <button
+                    type="button"
+                    onClick={handleCopyFromTo}
+                    title="Copy Location From to Location To"
+                    className="inline-flex items-center space-x-1 text-[11px] font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg border border-stone-200 transition-colors"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>From ➔ To</span>
+                  </button>
+                )}
+                {locationFrom && locationTo && (
+                  <button
+                    type="button"
+                    onClick={handleSwapFromTo}
+                    title="Swap Location From and To"
+                    className="inline-flex items-center space-x-1 text-[11px] font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg border border-stone-200 transition-colors"
+                  >
+                    <ArrowUpDown className="w-3 h-3" />
+                    <span>Swap</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Location From */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-bold text-stone-900">
-                  Location From <span className="text-amber-600">*</span>
+                  Location From <span className="text-stone-400 font-normal text-xs">(Optional)</span>
                 </label>
                 <button
                   type="button"
@@ -363,15 +456,14 @@ export const FieldWorkerDashboard: React.FC = () => {
                   ) : (
                     <MapPin className="w-4 h-4 text-amber-700" />
                   )}
-                  <span>📍 Capture GPS</span>
+                  <span>📍 Live GPS</span>
                 </button>
               </div>
               <input
                 type="text"
-                required
                 value={locationFrom}
                 onChange={(e) => setLocationFrom(e.target.value)}
-                placeholder="e.g. MH-104 / Substation Gate or capture via GPS"
+                placeholder="Optional: Auto-filled from Photo GPS, live GPS, or chainage (e.g. 18.9416°N 73.0326°E)"
                 className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
               />
             </div>
@@ -380,7 +472,7 @@ export const FieldWorkerDashboard: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-bold text-stone-900">
-                  Location To <span className="text-amber-600">*</span>
+                  Location To <span className="text-stone-400 font-normal text-xs">(Optional)</span>
                 </label>
                 <button
                   type="button"
@@ -393,15 +485,14 @@ export const FieldWorkerDashboard: React.FC = () => {
                   ) : (
                     <MapPin className="w-4 h-4 text-amber-700" />
                   )}
-                  <span>📍 Capture GPS</span>
+                  <span>📍 Live GPS</span>
                 </button>
               </div>
               <input
                 type="text"
-                required
                 value={locationTo}
                 onChange={(e) => setLocationTo(e.target.value)}
-                placeholder="e.g. MH-105 / Pole #42 or capture via GPS"
+                placeholder="Optional: Auto-filled from Photo GPS, live GPS, or chainage (e.g. 18.9416°N 73.0326°E)"
                 className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
               />
             </div>
@@ -463,13 +554,14 @@ export const FieldWorkerDashboard: React.FC = () => {
             />
           </div>
 
-          {/* 6. Site Photos (Up to 4) */}
+          {/* 6. Site Photos (Up to 4) with automatic GPS extraction */}
           <div className="pt-1">
             <PhotoUploader
               photos={photos}
               onChange={setPhotos}
               maxPhotos={4}
               disabled={submitting}
+              onGpsExtracted={handleGpsExtracted}
               onPreviewPhoto={(idx) =>
                 setLightboxData({
                   photos,
@@ -664,18 +756,27 @@ export const FieldWorkerDashboard: React.FC = () => {
 
                   {/* Locations From -> To */}
                   <div className="bg-stone-50 rounded-xl p-3 text-xs space-y-1.5 border border-stone-200/80 mb-3">
-                    <div className="flex items-start space-x-2">
-                      <span className="font-bold text-stone-600 flex-shrink-0">📍 From:</span>
-                      <span className="text-stone-900 font-medium break-words">
-                        {entry.locationFrom}
-                      </span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <span className="font-bold text-stone-600 flex-shrink-0">📍 To:</span>
-                      <span className="text-stone-900 font-medium break-words">
-                        {entry.locationTo}
-                      </span>
-                    </div>
+                    {entry.locationFrom ? (
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-stone-600 flex-shrink-0">📍 From:</span>
+                        <span className="text-stone-900 font-medium break-words">
+                          {entry.locationFrom}
+                        </span>
+                      </div>
+                    ) : null}
+                    {entry.locationTo ? (
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-stone-600 flex-shrink-0">📍 To:</span>
+                        <span className="text-stone-900 font-medium break-words">
+                          {entry.locationTo}
+                        </span>
+                      </div>
+                    ) : null}
+                    {!entry.locationFrom && !entry.locationTo && (
+                      <div className="flex items-center space-x-1.5 text-stone-400 italic text-[11px]">
+                        <span>📍 Location: Not specified (logged off-site)</span>
+                      </div>
+                    )}
                     {entry.remark && (
                       <div className="pt-1 border-t border-stone-200/60 flex items-start space-x-2">
                         <span className="font-bold text-stone-600 flex-shrink-0">📝 Remark:</span>

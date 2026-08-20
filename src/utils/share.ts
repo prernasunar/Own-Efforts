@@ -50,8 +50,8 @@ export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string):
       return [
         `*#${idx + 1}* [${e.status === 'Done' ? '✅ Done' : '⏳ Pending'}] *${e.workType}*`,
         `👷 ${e.userName} | 📏 ${e.quantity} ${e.uom}`,
-        `📍 From: ${e.locationFrom}`,
-        `📍 To: ${e.locationTo}`,
+        `📍 From: ${e.locationFrom || 'N/A'}`,
+        `📍 To: ${e.locationTo || 'N/A'}`,
         e.remark ? `📝 Remark: ${e.remark}` : '',
         time ? `🕒 ${time}` : '',
       ]

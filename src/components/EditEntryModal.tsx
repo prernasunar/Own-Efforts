@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { WorkEntry, EntryStatus, WorkTypeItem, UOMType } from '../types';
-import { X, CheckCircle2, Clock, MapPin, Loader2 } from 'lucide-react';
+import { X, CheckCircle2, Clock, MapPin, Loader2, Sparkles, Copy, ArrowUpDown } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
+import { PhotoGpsData } from '../utils/photoGpsExtractor';
 
 interface EditEntryModalProps {
   entry: WorkEntry;
@@ -34,6 +35,8 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
   const [gpsLoadingFrom, setGpsLoadingFrom] = useState(false);
   const [gpsLoadingTo, setGpsLoadingTo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gpsNotice, setGpsNotice] = useState<string | null>(null);
+  const [lastDetectedGps, setLastDetectedGps] = useState<PhotoGpsData | null>(null);
 
   if (!isOpen) return null;
 
@@ -65,15 +68,27 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
     }
   };
 
+  const handleGpsExtracted = (gpsData: PhotoGpsData, photoIndex: number) => {
+    setLastDetectedGps(gpsData);
+    const loc = gpsData.formattedLocation;
+
+    if (photoIndex === 0) {
+      setLocationFrom(loc);
+      setLocationTo(loc);
+      setGpsNotice(`📍 Extracted GPS from Photo: Auto-filled From & To (${loc})`);
+    } else {
+      setLocationTo(loc);
+      setGpsNotice(`📍 Updated Location To with Photo #${photoIndex + 1} GPS (${loc})`);
+    }
+
+    setTimeout(() => setGpsNotice(null), 5000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = Number(quantity);
     if (isNaN(num) || num <= 0) {
       setError('Please enter a valid positive quantity');
-      return;
-    }
-    if (!locationFrom.trim() || !locationTo.trim()) {
-      setError('Both Location From and Location To are required');
       return;
     }
 
@@ -117,6 +132,13 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium">
             {error}
+          </div>
+        )}
+
+        {gpsNotice && (
+          <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{gpsNotice}</span>
           </div>
         )}
 
@@ -195,11 +217,43 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
             </div>
           </div>
 
+          {/* Quick Helper toolbar */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+              Location / Chainage
+            </span>
+            <div className="flex items-center space-x-1.5">
+              {lastDetectedGps && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocationFrom(lastDetectedGps.formattedLocation);
+                    setLocationTo(lastDetectedGps.formattedLocation);
+                  }}
+                  className="text-[10px] font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-300 transition-colors flex items-center space-x-1"
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  <span>Use Photo GPS</span>
+                </button>
+              )}
+              {locationFrom && (
+                <button
+                  type="button"
+                  onClick={() => setLocationTo(locationFrom)}
+                  className="text-[10px] font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 px-2 py-0.5 rounded border border-stone-200 transition-colors flex items-center space-x-1"
+                >
+                  <Copy className="w-2.5 h-2.5" />
+                  <span>From ➔ To</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Location From with GPS */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-semibold text-stone-800">
-                Location From
+                Location From <span className="text-stone-400 font-normal text-xs">(Optional)</span>
               </label>
               <button
                 type="button"
@@ -217,9 +271,9 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
             </div>
             <input
               type="text"
-              required
               value={locationFrom}
               onChange={(e) => setLocationFrom(e.target.value)}
+              placeholder="Optional: Auto-filled from photo GPS or live GPS"
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
             />
           </div>
@@ -228,7 +282,7 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-semibold text-stone-800">
-                Location To
+                Location To <span className="text-stone-400 font-normal text-xs">(Optional)</span>
               </label>
               <button
                 type="button"
@@ -246,9 +300,9 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
             </div>
             <input
               type="text"
-              required
               value={locationTo}
               onChange={(e) => setLocationTo(e.target.value)}
+              placeholder="Optional: Auto-filled from photo GPS or live GPS"
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
             />
           </div>
@@ -266,13 +320,14 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
             />
           </div>
 
-          {/* Photos Management */}
+          {/* Photos Management with GPS Extraction */}
           <div>
             <PhotoUploader
               photos={photos}
               onChange={setPhotos}
               maxPhotos={4}
               disabled={saving}
+              onGpsExtracted={handleGpsExtracted}
               onPreviewPhoto={(idx) => setLightboxData({ index: idx })}
             />
           </div>
@@ -310,3 +365,4 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
     </div>
   );
 };
+

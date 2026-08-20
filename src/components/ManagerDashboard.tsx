@@ -18,10 +18,14 @@ import {
   ClipboardList,
   Sparkles,
   Camera,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { formatSingleEntryText, formatTeamReportText } from '../utils/share';
 import { ShareModal } from './ShareModal';
 import { PhotoLightbox } from './PhotoLightbox';
+import { ExcelExportModal } from './ExcelExportModal';
+import { exportCivilWorkToExcel } from '../utils/excelExporter';
 
 export const ManagerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
@@ -34,9 +38,11 @@ export const ManagerDashboard: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL', 'Pending', 'Done'
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Share & Lightbox Modal State
+  // Share, Excel & Lightbox Modal State
   const [shareData, setShareData] = useState<{ title: string; text: string; photos?: string[] } | null>(null);
   const [lightboxData, setLightboxData] = useState<{ photos: string[]; index: number; title: string } | null>(null);
+  const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
+  const [quickExporting, setQuickExporting] = useState<boolean>(false);
 
   // Extract unique worker names for dropdown
   const uniqueWorkerNames = useMemo(() => {
@@ -147,6 +153,23 @@ export const ManagerDashboard: React.FC = () => {
     });
   };
 
+  const handleQuickExportCurrentView = () => {
+    setQuickExporting(true);
+    try {
+      exportCivilWorkToExcel(entries, {
+        workerFilter: selectedWorker,
+        dateFilterType: selectedDate === 'TODAY' ? 'TODAY' : selectedDate === 'CUSTOM' ? 'CUSTOM_DATE' : 'ALL',
+        customDate: selectedDate === 'CUSTOM' ? customDate : undefined,
+        statusFilter: selectedStatus as any,
+        groupBy: 'multi_tab_master',
+      });
+    } catch (err) {
+      console.error('Error in quick export:', err);
+    } finally {
+      setQuickExporting(false);
+    }
+  };
+
   const resetFilters = () => {
     setSelectedWorker('ALL');
     setSelectedDate('ALL');
@@ -167,18 +190,31 @@ export const ManagerDashboard: React.FC = () => {
               Team Operations Dashboard
             </h2>
             <p className="text-xs text-stone-300 mt-0.5">
-              Live monitoring of all field worker submissions with instant leadership reporting
+              Live monitoring of all field worker submissions with date-wise & user-wise Excel export
             </p>
           </div>
 
-          {/* Share All Button */}
-          <button
-            onClick={handleShareAllFiltered}
-            className="flex items-center justify-center space-x-2 px-5 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-black text-sm shadow-md transition-all self-start sm:self-auto"
-          >
-            <Share2 className="w-4 h-4" />
-            <span>Share All (Filtered)</span>
-          </button>
+          {/* Header Action Buttons (Excel Export & Share All) */}
+          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            {/* Advanced Excel Export Button */}
+            <button
+              onClick={() => setShowExcelModal(true)}
+              className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white font-black text-sm shadow-md transition-all border border-emerald-400/40"
+              title="Customized Excel export with Date-Wise and User-Wise filters and multi-sheet summaries"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>Export to Excel</span>
+            </button>
+
+            {/* Share All Button */}
+            <button
+              onClick={handleShareAllFiltered}
+              className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-black text-sm shadow-md transition-all"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Share (Filtered)</span>
+            </button>
+          </div>
         </div>
 
         {/* TOP SUMMARY BAR (Total Entries Today, Pending vs Done, Active Workers) */}
@@ -340,22 +376,53 @@ export const ManagerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Search Input */}
-        <div className="relative pt-1">
-          <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search work types, locations, remarks, or worker names..."
-            className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-stone-300 text-stone-900 placeholder-stone-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-          />
+        {/* Search Input & Quick Export Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search work types, locations, remarks, or worker names..."
+              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-stone-300 text-stone-900 placeholder-stone-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            {/* Quick Export Current View */}
+            <button
+              type="button"
+              onClick={handleQuickExportCurrentView}
+              disabled={quickExporting || filteredEntries.length === 0}
+              className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                filteredEntries.length === 0
+                  ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 active:bg-emerald-200'
+              }`}
+              title="Quickly download current filtered logs as Excel"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-700" />
+              <span>{quickExporting ? 'Exporting...' : `Export Excel (${filteredEntries.length})`}</span>
+            </button>
+
+            {/* Advanced Excel Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setShowExcelModal(true)}
+              className="flex items-center justify-center space-x-1 px-3 py-2 rounded-xl text-xs font-bold bg-stone-900 text-white hover:bg-stone-800 transition-colors shadow-xs"
+              title="Open full Date-Wise & User-Wise Excel Export Configurator"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Custom Export</span>
+            </button>
+          </div>
         </div>
       </section>
 
       {/* REAL-TIME ENTRIES LIST (ALL WORKERS) */}
       <section className="space-y-3.5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight">
               All Field Entries ({filteredEntries.length})
@@ -365,10 +432,20 @@ export const ManagerDashboard: React.FC = () => {
             </p>
           </div>
 
-          <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Live Stream</span>
-          </span>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowExcelModal(true)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 text-xs font-bold transition-colors shadow-xs"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Date & User Excel</span>
+            </button>
+
+            <span className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live Stream</span>
+            </span>
+          </div>
         </div>
 
         {filteredEntries.length === 0 ? (
@@ -456,18 +533,27 @@ export const ManagerDashboard: React.FC = () => {
 
                   {/* Locations From -> To */}
                   <div className="bg-stone-50 rounded-xl p-3 text-xs space-y-1.5 border border-stone-200/80 mb-3">
-                    <div className="flex items-start space-x-2">
-                      <span className="font-bold text-stone-600 flex-shrink-0">📍 From:</span>
-                      <span className="text-stone-900 font-medium break-words">
-                        {entry.locationFrom}
-                      </span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <span className="font-bold text-stone-600 flex-shrink-0">📍 To:</span>
-                      <span className="text-stone-900 font-medium break-words">
-                        {entry.locationTo}
-                      </span>
-                    </div>
+                    {entry.locationFrom ? (
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-stone-600 flex-shrink-0">📍 From:</span>
+                        <span className="text-stone-900 font-medium break-words">
+                          {entry.locationFrom}
+                        </span>
+                      </div>
+                    ) : null}
+                    {entry.locationTo ? (
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-stone-600 flex-shrink-0">📍 To:</span>
+                        <span className="text-stone-900 font-medium break-words">
+                          {entry.locationTo}
+                        </span>
+                      </div>
+                    ) : null}
+                    {!entry.locationFrom && !entry.locationTo && (
+                      <div className="flex items-center space-x-1.5 text-stone-400 italic text-[11px]">
+                        <span>📍 Location: Not specified (logged off-site)</span>
+                      </div>
+                    )}
                     {entry.remark && (
                       <div className="pt-1 border-t border-stone-200/60 flex items-start space-x-2">
                         <span className="font-bold text-stone-600 flex-shrink-0">📝 Remark:</span>
@@ -556,6 +642,16 @@ export const ManagerDashboard: React.FC = () => {
           onClose={() => setLightboxData(null)}
         />
       )}
+
+      {/* Date-Wise & User-Wise Excel Export Modal */}
+      <ExcelExportModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        entries={entries}
+        initialWorker={selectedWorker}
+        initialDateType={selectedDate === 'CUSTOM' ? 'CUSTOM_DATE' : selectedDate === 'TODAY' ? 'TODAY' : 'ALL'}
+        initialCustomDate={customDate}
+      />
     </div>
   );
 };
