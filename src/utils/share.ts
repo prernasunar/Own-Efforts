@@ -63,6 +63,50 @@ export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string):
   return `${header}${entriesText}\n\n━━━━━━━━━━━━━━━━━━━━\n_Generated via Civil Site Work Logger_`;
 }
 
+export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: string): string {
+  const now = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  const total = entries.length;
+  const doneCount = entries.filter((e) => e.status === 'Done').length;
+  const pendingCount = entries.filter((e) => e.status === 'Pending').length;
+  const totalPhotos = entries.reduce((sum, e) => sum + (e.photos?.length || 0), 0);
+  const worker = workerName || entries[0]?.userName || 'Field Worker';
+
+  const header = [
+    `🏗️ *CIVIL SITE WORK LOG SUMMARY*`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `👷 *Logged By:* ${worker}`,
+    `📅 *Date:* ${now}`,
+    `📊 *Total Works Selected:* ${total} (✅ ${doneCount} Done | ⏳ ${pendingCount} Pending)`,
+    totalPhotos > 0 ? `📸 *Total Attached Photos:* ${totalPhotos}` : '',
+    `━━━━━━━━━━━━━━━━━━━━`,
+    '',
+  ].filter(Boolean).join('\n');
+
+  if (entries.length === 0) {
+    return `${header}No work items selected.`;
+  }
+
+  const itemsList = entries
+    .map((e, idx) => {
+      const time = e.createdAt?.toDate
+        ? e.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        : '';
+      const photoNote = e.photos && e.photos.length > 0 ? ` [📸 ${e.photos.length} photo(s)]` : '';
+      return [
+        `*${idx + 1}.* [${e.status === 'Done' ? '✅ DONE' : '⏳ PENDING'}] *${e.workType}*`,
+        `   📏 *Qty:* ${e.quantity} ${e.uom}${photoNote}`,
+        `   📍 *From:* ${e.locationFrom || 'N/A'} ➡️ *To:* ${e.locationTo || 'N/A'}`,
+        e.remark ? `   📝 *Note:* ${e.remark}` : '',
+        time ? `   🕒 *Logged:* ${time}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    })
+    .join('\n\n');
+
+  return `${header}${itemsList}\n\n━━━━━━━━━━━━━━━━━━━━\n_Generated via Civil Site Work Logger_`;
+}
+
 export function getWhatsAppUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }

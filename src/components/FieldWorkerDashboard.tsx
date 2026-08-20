@@ -17,15 +17,22 @@ import {
   Building2,
   ArrowRight,
   Sparkles,
+  CheckSquare,
+  Square,
+  CheckCheck,
+  Layers,
+  SendHorizontal,
+  X,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
-import { formatSingleEntryText } from '../utils/share';
+import { formatSingleEntryText, formatWorkerBatchReportText } from '../utils/share';
 import { AddWorkTypeModal } from './AddWorkTypeModal';
 import { EditEntryModal } from './EditEntryModal';
 import { ShareModal } from './ShareModal';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
-import { Camera, Image as ImageIcon } from 'lucide-react';
 
 export const FieldWorkerDashboard: React.FC = () => {
   const { userProfile, user } = useAuth();
@@ -49,6 +56,9 @@ export const FieldWorkerDashboard: React.FC = () => {
 
   const [gpsLoadingFrom, setGpsLoadingFrom] = useState<boolean>(false);
   const [gpsLoadingTo, setGpsLoadingTo] = useState<boolean>(false);
+
+  // Multi-select batch sharing state
+  const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
 
   // Modals & Lightbox state
   const [isAddTypeOpen, setIsAddTypeOpen] = useState<boolean>(false);
@@ -161,6 +171,49 @@ export const FieldWorkerDashboard: React.FC = () => {
       photos: entry.photos || [],
     });
   };
+
+  // Multi-select batch handlers
+  const toggleSelectEntry = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedEntryIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedEntryIds.length === myEntries.length) {
+      setSelectedEntryIds([]);
+    } else {
+      setSelectedEntryIds(myEntries.map((e) => e.id));
+    }
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedEntryIds([]);
+  };
+
+  const handleSendSelectedBatch = () => {
+    const selected = myEntries.filter((e) => selectedEntryIds.includes(e.id));
+    if (selected.length === 0) return;
+
+    const text = formatWorkerBatchReportText(
+      selected,
+      userProfile?.name || user?.displayName || 'Site Worker'
+    );
+    const photos = selected.flatMap((e) => e.photos || []);
+
+    setShareData({
+      title: `Share ${selected.length} Selected Work${selected.length > 1 ? 's' : ''}`,
+      text,
+      photos,
+    });
+  };
+
+  const selectedEntries = myEntries.filter((e) => selectedEntryIds.includes(e.id));
+  const selectedPhotosCount = selectedEntries.reduce(
+    (sum, e) => sum + (e.photos?.length || 0),
+    0
+  );
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-8 font-sans">
@@ -448,18 +501,89 @@ export const FieldWorkerDashboard: React.FC = () => {
         </form>
       </section>
 
-      {/* FIELD WORKER — MY ENTRIES LIST */}
+      {/* FIELD WORKER — MY ENTRIES LIST WITH MULTI-SELECT & BATCH SEND */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight">
-              My Past Site Logs
+            <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight flex items-center space-x-2">
+              <span>My Past Site Logs</span>
+              <span className="text-xs font-bold bg-stone-200 text-stone-700 px-2 py-0.5 rounded-full">
+                {myEntries.length}
+              </span>
             </h3>
             <p className="text-xs font-medium text-stone-500">
-              Only your submitted entries ({myEntries.length})
+              Select multiple works to share as a combined site report at once.
             </p>
           </div>
+
+          {myEntries.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 active:bg-stone-100 text-xs font-bold text-stone-700 shadow-2xs transition-colors"
+              >
+                {selectedEntryIds.length === myEntries.length ? (
+                  <>
+                    <CheckSquare className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Deselect All</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCheck className="w-3.5 h-3.5 text-stone-600" />
+                    <span>Select All ({myEntries.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Floating / Sticky Batch Action Bar when entries are selected */}
+        {selectedEntryIds.length > 0 && (
+          <div className="sticky top-2 z-30 p-3.5 sm:p-4 rounded-2xl bg-amber-900 text-white shadow-xl border border-amber-700/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <p className="font-extrabold text-sm sm:text-base text-white">
+                    {selectedEntryIds.length} Work{selectedEntryIds.length > 1 ? 's' : ''} Selected
+                  </p>
+                  {selectedPhotosCount > 0 && (
+                    <span className="bg-amber-800 text-amber-200 border border-amber-600 text-[11px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
+                      <Camera className="w-3 h-3" />
+                      <span>{selectedPhotosCount} photos</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-amber-200">
+                  Ready to send together via WhatsApp, Telegram, or device share
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleDeselectAll}
+                className="px-3 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-950 text-amber-200 text-xs font-bold transition-colors"
+              >
+                Clear
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSendSelectedBatch}
+                className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-[0.98]"
+              >
+                <SendHorizontal className="w-4 h-4" />
+                <span>Send {selectedEntryIds.length} Works at Once</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {myEntries.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center border-2 border-dashed border-stone-200">
@@ -481,30 +605,52 @@ export const FieldWorkerDashboard: React.FC = () => {
                 : 'Just now';
 
               const isDone = entry.status === 'Done';
+              const isSelected = selectedEntryIds.includes(entry.id);
 
               return (
                 <div
                   key={entry.id}
-                  className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-stone-200 hover:border-amber-300 transition-all"
+                  onClick={() => toggleSelectEntry(entry.id)}
+                  className={`bg-white rounded-2xl p-4 sm:p-5 shadow-sm border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-amber-500 ring-2 ring-amber-400/50 bg-amber-50/25'
+                      : 'border-stone-200 hover:border-amber-300'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2.5">
-                    <div>
-                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        <h4 className="text-base sm:text-lg font-black text-stone-900">
-                          {entry.workType}
-                        </h4>
-                        {/* Status badge: Orange for Pending, Green for Done */}
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black border ${
-                            isDone
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : 'bg-orange-100 text-orange-800 border-orange-300'
-                          }`}
-                        >
-                          {isDone ? '✅ Done' : '⏳ Pending'}
-                        </span>
+                    <div className="flex items-start space-x-3">
+                      {/* Checkbox selector */}
+                      <button
+                        type="button"
+                        onClick={(e) => toggleSelectEntry(entry.id, e)}
+                        className={`mt-0.5 p-1 rounded-lg border transition-colors flex-shrink-0 ${
+                          isSelected
+                            ? 'bg-amber-600 border-amber-600 text-white'
+                            : 'border-stone-300 bg-stone-50 hover:border-amber-400 text-transparent'
+                        }`}
+                        title={isSelected ? 'Deselect this log' : 'Select this log to send'}
+                      >
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      </button>
+
+                      <div>
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                          <h4 className="text-base sm:text-lg font-black text-stone-900">
+                            {entry.workType}
+                          </h4>
+                          {/* Status badge: Orange for Pending, Green for Done */}
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black border ${
+                              isDone
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-orange-100 text-orange-800 border-orange-300'
+                            }`}
+                          >
+                            {isDone ? '✅ Done' : '⏳ Pending'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5">Logged: {formattedDate}</p>
                       </div>
-                      <p className="text-xs text-stone-500 mt-0.5">Logged: {formattedDate}</p>
                     </div>
 
                     {/* Big Quantity Pill */}
@@ -539,7 +685,7 @@ export const FieldWorkerDashboard: React.FC = () => {
 
                     {/* Attached Photos */}
                     {entry.photos && entry.photos.length > 0 && (
-                      <div className="pt-2 border-t border-stone-200/60">
+                      <div className="pt-2 border-t border-stone-200/60" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="font-bold text-stone-700 text-[11px] flex items-center space-x-1">
                             <Camera className="w-3.5 h-3.5 text-amber-600" />
@@ -554,7 +700,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                               type="button"
                               onClick={() =>
                                 setLightboxData({
-                                  photos: entry.photos || [],
+                                    photos: entry.photos || [],
                                   index: pIdx,
                                   title: `${entry.workType} (${entry.quantity} ${entry.uom})`,
                                 })
@@ -576,8 +722,11 @@ export const FieldWorkerDashboard: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Actions: Edit, Delete, Share */}
-                  <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+                  {/* Actions: Edit, Delete, Share Single */}
+                  <div
+                    className="flex items-center justify-between pt-1 border-t border-stone-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => setEditingEntry(entry)}
@@ -595,13 +744,27 @@ export const FieldWorkerDashboard: React.FC = () => {
                       </button>
                     </div>
 
-                    <button
-                      onClick={() => handleShareEntry(entry)}
-                      className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Share</span>
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => toggleSelectEntry(entry.id)}
+                        className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                          isSelected
+                            ? 'bg-amber-200 text-amber-900'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                      >
+                        {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                        <span>{isSelected ? 'Selected' : 'Select'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleShareEntry(entry)}
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Share</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
