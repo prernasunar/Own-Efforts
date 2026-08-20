@@ -21,9 +21,26 @@ export const AuthView: React.FC = () => {
     try {
       await signInWithGoogle(role);
     } catch (err: any) {
-      console.error('Google auth error:', err);
-      if (err.code !== 'auth/popup-closed-by-user') {
-        setError(err.message || 'Google sign in failed. Please try again or use Instant Access.');
+      const isCancellation =
+        err?.code === 'auth/user-cancelled' ||
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request' ||
+        (typeof err?.message === 'string' &&
+          (err.message.includes('auth/user-cancelled') ||
+            err.message.includes('auth/popup-closed-by-user') ||
+            err.message.includes('auth/cancelled-popup-request') ||
+            err.message.includes('user-cancelled')));
+
+      if (isCancellation) {
+        // User voluntarily closed the Google popup or declined permissions - no error message needed
+        return;
+      }
+
+      console.warn('Google auth warning:', err);
+      if (err?.code === 'auth/popup-blocked') {
+        setError('Popup was blocked by your browser. Please allow popups or use Instant Access below.');
+      } else {
+        setError(err.message || 'Google sign in failed. Please try again or use Instant 1-Click Access.');
       }
     } finally {
       setLoading(false);

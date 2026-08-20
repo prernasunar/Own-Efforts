@@ -220,8 +220,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserProfile(profile);
         localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
       }
-    } catch (error) {
-      console.error('Google Sign In Error:', error);
+    } catch (error: any) {
+      const isCancellation =
+        error?.code === 'auth/user-cancelled' ||
+        error?.code === 'auth/popup-closed-by-user' ||
+        error?.code === 'auth/cancelled-popup-request' ||
+        (typeof error?.message === 'string' &&
+          (error.message.includes('auth/user-cancelled') ||
+            error.message.includes('auth/popup-closed-by-user') ||
+            error.message.includes('auth/cancelled-popup-request') ||
+            error.message.includes('user-cancelled')));
+
+      if (isCancellation) {
+        console.debug('Google sign in was cancelled by user:', error?.code || error?.message);
+        return;
+      }
+
+      console.warn('Google Sign In Error:', error);
       throw error;
     } finally {
       setLoading(false);
