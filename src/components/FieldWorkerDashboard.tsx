@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkData } from '../context/WorkDataContext';
-import { WorkEntry, EntryStatus, UOMType } from '../types';
+import { WorkEntry, EntryStatus } from '../types';
 import {
-  Plus,
   MapPin,
   Clock,
   CheckCircle2,
@@ -15,22 +14,20 @@ import {
   AlertCircle,
   Check,
   Building2,
-  ArrowRight,
   Sparkles,
   CheckSquare,
   Square,
   CheckCheck,
   Layers,
   SendHorizontal,
-  X,
   Camera,
-  Image as ImageIcon,
-  ArrowUpDown,
-  Copy,
+  Navigation,
+  Globe,
+  Compass,
+  Calendar,
 } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { formatSingleEntryText, formatWorkerBatchReportText } from '../utils/share';
-import { AddWorkTypeModal } from './AddWorkTypeModal';
 import { EditEntryModal } from './EditEntryModal';
 import { ShareModal } from './ShareModal';
 import { PhotoUploader } from './PhotoUploader';
@@ -39,18 +36,43 @@ import { PhotoGpsData } from '../utils/photoGpsExtractor';
 
 export const FieldWorkerDashboard: React.FC = () => {
   const { userProfile, user } = useAuth();
-  const { workTypes, myEntries, createEntry, updateEntry, deleteEntry, addWorkType, loading } =
-    useWorkData();
+  const { myEntries, createEntry, updateEntry, deleteEntry, workTypes } = useWorkData();
 
-  // Form State
-  const [selectedWorkType, setSelectedWorkType] = useState<string>('T&D');
-  const [uom, setUom] = useState<UOMType>('meter');
-  const [quantity, setQuantity] = useState<string>('');
-  const [status, setStatus] = useState<EntryStatus>('Done');
-  const [locationFrom, setLocationFrom] = useState<string>('');
-  const [locationTo, setLocationTo] = useState<string>('');
+  // Core Worker View Form Fields (Date, Route, Location, Lat & Log, Remark, Photos, Status)
+  const getTodayIso = () => new Date().toLocaleDateString('en-CA');
+  const [date, setDate] = useState<string>(getTodayIso);
+  const [route, setRoute] = useState<string>('');
+  const [location, setLocation] = useState<string>('');
+  const [latLong, setLatLong] = useState<string>('');
   const [remark, setRemark] = useState<string>('');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [status, setStatus] = useState<EntryStatus>('Done');
+
+  // Quick Date Selectors
+  const setTodayDate = () => setDate(getTodayIso());
+  const setYesterdayDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    setDate(d.toLocaleDateString('en-CA'));
+  };
+
+  const formatDisplayDate = (isoStr: string) => {
+    if (!isoStr) return '';
+    try {
+      const [y, m, d] = isoStr.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      return dateObj.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return isoStr;
+    }
+  };
+
+  // Auto-fill and notification states
   const [lastDetectedGps, setLastDetectedGps] = useState<PhotoGpsData | null>(null);
   const [gpsAutoFillNotice, setGpsAutoFillNotice] = useState<string | null>(null);
 
@@ -58,106 +80,68 @@ export const FieldWorkerDashboard: React.FC = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [formSuccess, setFormSuccess] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  const [gpsLoadingFrom, setGpsLoadingFrom] = useState<boolean>(false);
-  const [gpsLoadingTo, setGpsLoadingTo] = useState<boolean>(false);
+  const [gpsLoading, setGpsLoading] = useState<boolean>(false);
 
   // Multi-select batch sharing state
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
 
   // Modals & Lightbox state
-  const [isAddTypeOpen, setIsAddTypeOpen] = useState<boolean>(false);
   const [editingEntry, setEditingEntry] = useState<WorkEntry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [shareData, setShareData] = useState<{ title: string; text: string; photos?: string[] } | null>(null);
   const [lightboxData, setLightboxData] = useState<{ photos: string[]; index: number; title: string } | null>(null);
 
-  // Sync UOM when work type changes
-  useEffect(() => {
-    const matched = workTypes.find((wt) => wt.name === selectedWorkType);
-    if (matched) {
-      setUom(matched.uom);
-    } else if (workTypes.length > 0) {
-      setSelectedWorkType(workTypes[0].name);
-      setUom(workTypes[0].uom);
-    }
-  }, [selectedWorkType, workTypes]);
-
-  const handleSelectWorkType = (val: string) => {
-    if (val === '__ADD_NEW__') {
-      setIsAddTypeOpen(true);
-    } else {
-      setSelectedWorkType(val);
-      const matched = workTypes.find((wt) => wt.name === val);
-      if (matched) {
-        setUom(matched.uom);
-      }
-    }
-  };
-
-  const handleCaptureGPS = async (field: 'from' | 'to') => {
+  // Live GPS Capture button for the Location field
+  const handleCaptureLiveLocation = async () => {
     setFormError(null);
-    if (field === 'from') setGpsLoadingFrom(true);
-    else setGpsLoadingTo(true);
+    setGpsLoading(true);
 
     try {
       const geo = await captureCurrentLocation();
-      if (field === 'from') {
-        setLocationFrom(geo.formattedAddress);
-      } else {
-        setLocationTo(geo.formattedAddress);
-      }
+      setLocation(geo.formattedAddress);
+      const coordsString = `Lat ${geo.latitude.toFixed(6)}° Long ${geo.longitude.toFixed(6)}°`;
+      setLatLong(coordsString);
+      setGpsAutoFillNotice(`📍 Live GPS detected & filled: ${coordsString}`);
+      setTimeout(() => setGpsAutoFillNotice(null), 6000);
     } catch (err: any) {
-      setFormError(err.message || 'GPS location capture failed. You may enter text manually.');
+      setFormError(err.message || 'Live GPS capture failed. You can type location manually or upload photo.');
     } finally {
-      if (field === 'from') setGpsLoadingFrom(false);
-      else setGpsLoadingTo(false);
+      setGpsLoading(false);
     }
   };
 
+  // Automatic callback when GPS is extracted from Uploaded or Clicked Photo!
   const handleGpsExtracted = (gpsData: PhotoGpsData, photoIndex: number) => {
     setLastDetectedGps(gpsData);
-    const loc = gpsData.formattedLocation;
 
-    if (photoIndex === 0) {
-      // First photo: Auto-fill both Location From and Location To
-      setLocationFrom(loc);
-      setLocationTo(loc);
-      setGpsAutoFillNotice(`📍 Auto-filled "Location From" and "Location To" with Photo GPS: ${loc}`);
-    } else {
-      // Second/Subsequent photo: Smartly auto-fills "Location To" (End point)
-      setLocationTo(loc);
-      setGpsAutoFillNotice(`📍 Updated "Location To" (End point) from Photo #${photoIndex + 1} GPS: ${loc}`);
+    const coordsStr =
+      gpsData.formattedCoords || `Lat ${gpsData.latitude.toFixed(6)}° Long ${gpsData.longitude.toFixed(6)}°`;
+    const locStr = gpsData.address || gpsData.formattedLocation || gpsData.city || '';
+
+    // Automatically fill Lat & Log field
+    setLatLong(coordsStr);
+
+    // If location is empty or extracted has rich address, fill Location field
+    if (locStr) {
+      setLocation(locStr);
     }
+
+    setGpsAutoFillNotice(
+      `✅ Photo #${photoIndex + 1} GPS Detected: Auto-filled Lat & Log (${coordsStr})${
+        locStr ? ` and Location (${locStr})` : ''
+      }`
+    );
 
     setTimeout(() => {
       setGpsAutoFillNotice(null);
-    }, 6000);
-  };
-
-  const handleApplyGpsToBoth = () => {
-    if (!lastDetectedGps) return;
-    setLocationFrom(lastDetectedGps.formattedLocation);
-    setLocationTo(lastDetectedGps.formattedLocation);
-  };
-
-  const handleCopyFromTo = () => {
-    if (locationFrom) {
-      setLocationTo(locationFrom);
-    }
-  };
-
-  const handleSwapFromTo = () => {
-    const temp = locationFrom;
-    setLocationFrom(locationTo);
-    setLocationTo(temp);
+    }, 7000);
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const qtyNum = Number(quantity);
-    if (isNaN(qtyNum) || qtyNum <= 0) {
-      setFormError('Please enter a valid positive quantity.');
+
+    if (!route.trim() && !location.trim() && !latLong.trim() && photos.length === 0) {
+      setFormError('Please enter at least Route, Location, Lat & Log, or take/upload a photo.');
       return;
     }
 
@@ -166,22 +150,24 @@ export const FieldWorkerDashboard: React.FC = () => {
 
     try {
       await createEntry({
-        workType: selectedWorkType,
-        uom,
-        quantity: qtyNum,
-        status,
-        locationFrom: locationFrom.trim(),
-        locationTo: locationTo.trim(),
+        date: date || getTodayIso(),
+        route: route.trim(),
+        location: location.trim(),
+        latLong: latLong.trim(),
+        locationFrom: location.trim(),
         remark: remark.trim(),
         photos,
+        status,
+        workType: route.trim() || 'Site Work Log',
+        quantity: 1,
+        uom: 'meter',
       });
 
       setFormSuccess(true);
-      // Reset form fields except locations for quick repetitive logging
-      setQuantity('');
+      // Reset remark and photos, keep route/location for rapid logging along the same route
       setRemark('');
       setPhotos([]);
-      setTimeout(() => setFormSuccess(false), 3000);
+      setTimeout(() => setFormSuccess(false), 3500);
     } catch (err: any) {
       setFormError(err.message || 'Failed to submit site work log.');
     } finally {
@@ -189,25 +175,26 @@ export const FieldWorkerDashboard: React.FC = () => {
     }
   };
 
+  const handleShareEntry = (entry: WorkEntry) => {
+    const text = formatSingleEntryText(entry);
+    setShareData({
+      title: `Share ${entry.route || 'Site Work'} Log`,
+      text,
+      photos: entry.photos,
+    });
+  };
+
   const handleDeleteConfirm = async (id: string) => {
     try {
       await deleteEntry(id);
       setDeletingId(null);
+      setSelectedEntryIds((prev) => prev.filter((item) => item !== id));
     } catch (err: any) {
-      alert('Delete failed: ' + err.message);
+      setFormError(err.message || 'Failed to delete work log.');
     }
   };
 
-  const handleShareEntry = (entry: WorkEntry) => {
-    const text = formatSingleEntryText(entry);
-    setShareData({
-      title: `Share Log: ${entry.workType}`,
-      text,
-      photos: entry.photos || [],
-    });
-  };
-
-  // Multi-select batch handlers
+  // Selection toggle for batch sending
   const toggleSelectEntry = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setSelectedEntryIds((prev) =>
@@ -215,7 +202,7 @@ export const FieldWorkerDashboard: React.FC = () => {
     );
   };
 
-  const handleSelectAll = () => {
+  const handleToggleSelectAll = () => {
     if (selectedEntryIds.length === myEntries.length) {
       setSelectedEntryIds([]);
     } else {
@@ -235,12 +222,12 @@ export const FieldWorkerDashboard: React.FC = () => {
       selected,
       userProfile?.name || user?.displayName || 'Site Worker'
     );
-    const photos = selected.flatMap((e) => e.photos || []);
+    const batchPhotos = selected.flatMap((e) => e.photos || []);
 
     setShareData({
       title: `Share ${selected.length} Selected Work${selected.length > 1 ? 's' : ''}`,
       text,
-      photos,
+      photos: batchPhotos,
     });
   };
 
@@ -251,8 +238,8 @@ export const FieldWorkerDashboard: React.FC = () => {
   );
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-8 font-sans">
-      {/* Worker Greeting & Auto-Captured Details */}
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-7 font-sans">
+      {/* Worker Greeting Banner */}
       <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl p-4 sm:p-5 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-700/80 text-[11px] font-bold uppercase tracking-wider mb-1">
@@ -262,7 +249,7 @@ export const FieldWorkerDashboard: React.FC = () => {
             {userProfile?.name || user?.displayName || 'Site Engineer'}
           </h2>
           <p className="text-xs text-amber-100 mt-0.5">
-            Auto-stamped with your authenticated ID & live timestamp on every submit.
+            Log site progress with Route, Location, GPS Map Camera, and auto-extracted Lat & Log coordinates.
           </p>
         </div>
 
@@ -272,27 +259,30 @@ export const FieldWorkerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* CORE FEATURE: DAILY WORK ENTRY LOG FORM */}
+      {/* CORE WORKER FORM: Route, Location, Lat & Log, Remark, Upload & Click Photo */}
       <section className="bg-white rounded-2xl p-5 sm:p-7 shadow-md border border-stone-200">
         <div className="flex items-center justify-between pb-4 border-b border-stone-200 mb-5">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 font-bold">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 font-bold shadow-2xs">
               <Building2 className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-lg font-extrabold text-stone-900 tracking-tight">
                 Daily Work Entry Log
               </h3>
-              <p className="text-xs text-stone-500">Record civil work items with GPS & quantities</p>
+              <p className="text-xs text-stone-500">
+                Route • Location • Lat & Log • Remark • GPS Camera Photos
+              </p>
             </div>
           </div>
         </div>
 
+        {/* Success Alert */}
         {formSuccess && (
-          <div className="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 flex items-center space-x-3 shadow-xs">
+          <div className="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 flex items-center space-x-3 shadow-xs animate-in fade-in">
             <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
             <div>
-              <p className="font-bold text-sm">Site Log Submitted Successfully!</p>
+              <p className="font-bold text-sm">Site Work Logged Successfully!</p>
               <p className="text-xs text-emerald-700">
                 Synced to cloud and visible on the manager dashboard in real time.
               </p>
@@ -300,6 +290,7 @@ export const FieldWorkerDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* Error Alert */}
         {formError && (
           <div className="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start space-x-3 shadow-xs">
             <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
@@ -307,254 +298,170 @@ export const FieldWorkerDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* Automatic GPS Auto-fill Notification */}
+        {gpsAutoFillNotice && (
+          <div className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between shadow-xs animate-fadeIn">
+            <div className="flex items-center space-x-2.5">
+              <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <p className="text-xs sm:text-sm font-bold">{gpsAutoFillNotice}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGpsAutoFillNotice(null)}
+              className="text-emerald-700 hover:text-emerald-950 text-xs font-black px-2 py-1"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleFormSubmit} className="space-y-5">
-          {/* 1. Work Type & Auto-filled UOM */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-bold text-stone-900">
-                  Work Type <span className="text-amber-600">*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsAddTypeOpen(true)}
-                  className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center space-x-1"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Add new work type</span>
-                </button>
-              </div>
-
-              <select
-                value={selectedWorkType}
-                onChange={(e) => handleSelectWorkType(e.target.value)}
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-stone-300 text-stone-900 text-base font-semibold bg-white focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors shadow-xs"
-              >
-                {workTypes.map((wt, index) => (
-                  <option key={wt.id || `type-${index}`} value={wt.name}>
-                    {wt.name} {wt.isCustom ? '(Custom)' : ''}
-                  </option>
-                ))}
-                <option value="__ADD_NEW__" className="font-bold text-amber-700">
-                  ➕ + Add new custom work type...
-                </option>
-              </select>
-            </div>
-
-            {/* Locked UOM Display */}
-            <div>
-              <label className="block text-sm font-bold text-stone-900 mb-1.5">
-                Unit of Measurement
+          {/* DATE SECTION (Default Current Date & Fully Editable) */}
+          <div className="bg-gradient-to-r from-amber-50/90 to-orange-50/70 p-4 rounded-2xl border-2 border-amber-200/90 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <label className="text-xs font-black text-amber-950 flex items-center space-x-1.5">
+                <Calendar className="w-4 h-4 text-amber-600" />
+                <span>Date / कार्य दिनांक</span>
+                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                  Editable (बदला जा सकता है)
+                </span>
               </label>
-              <div className="w-full px-4 py-3.5 rounded-xl bg-stone-100 border-2 border-stone-200 text-stone-800 font-bold text-base flex items-center justify-between shadow-inner">
-                <span>{uom}</span>
-                <span className="text-[11px] font-semibold text-stone-500 uppercase px-2 py-0.5 rounded bg-stone-200">
-                  Locked
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* 2. Quantity Input */}
-          <div>
-            <label className="block text-sm font-bold text-stone-900 mb-1.5">
-              Quantity ({uom}) <span className="text-amber-600">*</span>
-            </label>
-            <div className="relative rounded-xl shadow-xs">
-              <input
-                type="number"
-                step="any"
-                required
-                min="0.01"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder={`Enter quantity in ${uom}`}
-                className="w-full pl-4 pr-24 py-3.5 rounded-xl border-2 border-stone-300 text-stone-900 text-lg font-bold placeholder-stone-400 focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
-              />
-              <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 text-xs font-black uppercase">
-                  {uom}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* GPS Auto-fill Notification Banner */}
-          {gpsAutoFillNotice && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 flex items-center justify-between shadow-xs animate-fadeIn">
-              <div className="flex items-center space-x-2.5">
-                <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                <p className="text-xs sm:text-sm font-bold">{gpsAutoFillNotice}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGpsAutoFillNotice(null)}
-                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-1"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* 3. GPS Location (From -> To) */}
-          <div className="space-y-4 pt-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-                Location & Chainage
-              </span>
-              <div className="flex items-center space-x-1.5">
-                {lastDetectedGps && (
-                  <button
-                    type="button"
-                    onClick={handleApplyGpsToBoth}
-                    title="Fill both Location From and To with Photo GPS"
-                    className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-lg border border-emerald-300 transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3 text-emerald-600" />
-                    <span>Fill Both with Photo GPS</span>
-                  </button>
-                )}
-                {locationFrom && (
-                  <button
-                    type="button"
-                    onClick={handleCopyFromTo}
-                    title="Copy Location From to Location To"
-                    className="inline-flex items-center space-x-1 text-[11px] font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg border border-stone-200 transition-colors"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>From ➔ To</span>
-                  </button>
-                )}
-                {locationFrom && locationTo && (
-                  <button
-                    type="button"
-                    onClick={handleSwapFromTo}
-                    title="Swap Location From and To"
-                    className="inline-flex items-center space-x-1 text-[11px] font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg border border-stone-200 transition-colors"
-                  >
-                    <ArrowUpDown className="w-3 h-3" />
-                    <span>Swap</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Location From */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-bold text-stone-900">
-                  Location From <span className="text-stone-400 font-normal text-xs">(Optional)</span>
-                </label>
+              {/* Quick Selectors: Today / Yesterday */}
+              <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  onClick={() => handleCaptureGPS('from')}
-                  disabled={gpsLoadingFrom}
-                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-amber-100 text-amber-900 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs"
+                  onClick={setTodayDate}
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${
+                    date === getTodayIso()
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                      : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-100'
+                  }`}
                 >
-                  {gpsLoadingFrom ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-amber-800" />
-                  ) : (
-                    <MapPin className="w-4 h-4 text-amber-700" />
-                  )}
-                  <span>📍 Live GPS</span>
+                  📅 Today (आज)
                 </button>
-              </div>
-              <input
-                type="text"
-                value={locationFrom}
-                onChange={(e) => setLocationFrom(e.target.value)}
-                placeholder="Optional: Auto-filled from Photo GPS, live GPS, or chainage (e.g. 18.9416°N 73.0326°E)"
-                className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
-              />
-            </div>
-
-            {/* Location To */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-bold text-stone-900">
-                  Location To <span className="text-stone-400 font-normal text-xs">(Optional)</span>
-                </label>
                 <button
                   type="button"
-                  onClick={() => handleCaptureGPS('to')}
-                  disabled={gpsLoadingTo}
-                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-amber-100 text-amber-900 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs"
+                  onClick={setYesterdayDate}
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${
+                    date !== getTodayIso()
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                      : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-100'
+                  }`}
                 >
-                  {gpsLoadingTo ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-amber-800" />
-                  ) : (
-                    <MapPin className="w-4 h-4 text-amber-700" />
-                  )}
-                  <span>📍 Live GPS</span>
+                  ⏮️ Yesterday (कल)
                 </button>
               </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border-2 border-stone-300 bg-white text-stone-900 text-sm font-black focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors shadow-2xs"
+                />
+              </div>
+              <div className="flex items-center space-x-2 text-xs font-bold text-stone-700 bg-white/95 px-3.5 py-2.5 rounded-xl border border-amber-200 shadow-2xs flex-shrink-0">
+                <span className="text-stone-400">Selected:</span>
+                <span className="text-amber-900 font-black">{formatDisplayDate(date)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 1. ROUTE FIELD */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                <Navigation className="w-4 h-4 text-amber-600" />
+                <span>Route / Trench Section</span>
+              </label>
+              <span className="text-[11px] text-stone-400 font-normal">e.g. Route 4, Main Feeder, Trench Section B</span>
+            </div>
+            <input
+              type="text"
+              value={route}
+              onChange={(e) => setRoute(e.target.value)}
+              placeholder="e.g. Route 4 / Nerul-Juinagar Link / Sector 23 Feeder"
+              className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-semibold placeholder-stone-400 focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* 2. LOCATION FIELD */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                <MapPin className="w-4 h-4 text-amber-600" />
+                <span>Location</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleCaptureLiveLocation}
+                disabled={gpsLoading}
+                className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-950 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-2xs"
+                title="Fetch live street address and coordinates"
+              >
+                {gpsLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-800" />
+                ) : (
+                  <Compass className="w-3.5 h-3.5 text-amber-700" />
+                )}
+                <span>📍 Live GPS</span>
+              </button>
+            </div>
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Auto-filled from Photo GPS or live GPS (e.g. Anirudha Bhawan, Sector 23, Juinagar, Navi Mumbai)"
+              className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium placeholder-stone-400 focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* 3. LAT & LOG (COORDINATES) FIELD - Auto-filled from uploaded/clicked photo! */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                <Globe className="w-4 h-4 text-amber-600" />
+                <span>Lat & Log (Auto-detected from photo / GPS)</span>
+              </label>
+              {latLong && (
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center space-x-1">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span>GPS Synced</span>
+                </span>
+              )}
+            </div>
+            <div className="relative">
               <input
                 type="text"
-                value={locationTo}
-                onChange={(e) => setLocationTo(e.target.value)}
-                placeholder="Optional: Auto-filled from Photo GPS, live GPS, or chainage (e.g. 18.9416°N 73.0326°E)"
-                className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
+                value={latLong}
+                onChange={(e) => setLatLong(e.target.value)}
+                placeholder="Auto-fills on photo upload/click: e.g. Lat 19.053155° Long 73.016608°"
+                className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-black font-mono bg-stone-50/70 focus:bg-white placeholder-stone-400 focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
               />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                <span className="text-[11px] font-bold text-stone-400">GPS</span>
+              </div>
             </div>
           </div>
 
-          {/* 4. Status Segmented Toggle */}
+          {/* 4. REMARK FIELD */}
           <div>
-            <label className="block text-sm font-bold text-stone-900 mb-1.5">
-              Work Status
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setStatus('Pending')}
-                className={`py-3.5 px-4 rounded-xl border-2 font-black text-sm sm:text-base flex items-center justify-center space-x-2 transition-all shadow-xs ${
-                  status === 'Pending'
-                    ? 'border-orange-500 bg-orange-50 text-orange-950 ring-2 ring-orange-400/40'
-                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
-                }`}
-              >
-                <Clock
-                  className={`w-5 h-5 ${
-                    status === 'Pending' ? 'text-orange-600' : 'text-stone-400'
-                  }`}
-                />
-                <span>⏳ Pending</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStatus('Done')}
-                className={`py-3.5 px-4 rounded-xl border-2 font-black text-sm sm:text-base flex items-center justify-center space-x-2 transition-all shadow-xs ${
-                  status === 'Done'
-                    ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-400/40'
-                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
-                }`}
-              >
-                <CheckCircle2
-                  className={`w-5 h-5 ${
-                    status === 'Done' ? 'text-emerald-600' : 'text-stone-400'
-                  }`}
-                />
-                <span>✅ Done</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 5. Optional Remark */}
-          <div>
-            <label className="block text-sm font-bold text-stone-900 mb-1.5">
+            <label className="block text-xs font-bold text-stone-900 mb-1">
               Remark / Site Notes <span className="text-xs font-normal text-stone-500">(Optional)</span>
             </label>
             <textarea
               rows={2}
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
-              placeholder="e.g. Duct joined with coupler, caution tape installed, soil backfilled..."
-              className="w-full px-4 py-3 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
+              placeholder="e.g. Concrete cover sealed, caution tape installed, backfilled with gravel..."
+              className="w-full px-4 py-2.5 rounded-xl border-2 border-stone-300 text-stone-900 text-sm font-medium focus:border-amber-600 focus:ring-0 focus:outline-none transition-colors"
             />
           </div>
 
-          {/* 6. Site Photos (Up to 4) with automatic GPS extraction */}
+          {/* 5. UPLOAD & CLICK PHOTO OPTIONS (Live GPS Map Camera + Auto Extraction) */}
           <div className="pt-1">
             <PhotoUploader
               photos={photos}
@@ -566,22 +473,64 @@ export const FieldWorkerDashboard: React.FC = () => {
                 setLightboxData({
                   photos,
                   index: idx,
-                  title: `${selectedWorkType} - Photo #${idx + 1}`,
+                  title: `${route || 'Site Work'} - Photo #${idx + 1}`,
                 })
               }
             />
           </div>
 
-          {/* Big Tap Primary Submit Button */}
+          {/* 6. STATUS (Pending vs Done) */}
+          <div>
+            <label className="block text-xs font-bold text-stone-800 mb-1">
+              Work Status
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setStatus('Pending')}
+                className={`py-3 px-4 rounded-xl border-2 font-black text-sm flex items-center justify-center space-x-2 transition-all shadow-xs ${
+                  status === 'Pending'
+                    ? 'border-orange-500 bg-orange-50 text-orange-950 ring-2 ring-orange-400/40'
+                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <Clock
+                  className={`w-4 h-4 ${
+                    status === 'Pending' ? 'text-orange-600' : 'text-stone-400'
+                  }`}
+                />
+                <span>⏳ Pending</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatus('Done')}
+                className={`py-3 px-4 rounded-xl border-2 font-black text-sm flex items-center justify-center space-x-2 transition-all shadow-xs ${
+                  status === 'Done'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-400/40'
+                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <CheckCircle2
+                  className={`w-4 h-4 ${
+                    status === 'Done' ? 'text-emerald-600' : 'text-stone-400'
+                  }`}
+                />
+                <span>✅ Done</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Primary Submit Button */}
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-4 px-6 rounded-2xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-black text-lg shadow-lg hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-amber-400/50 disabled:opacity-50 transition-all flex items-center justify-center space-x-2"
+            className="w-full py-4 px-6 rounded-2xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-black text-base sm:text-lg shadow-lg hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-amber-400/50 disabled:opacity-50 transition-all flex items-center justify-center space-x-2"
           >
             {submitting ? (
               <>
-                <Loader2 className="w-6 h-6 animate-spin" />
-                <span>Logging Site Work...</span>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Submitting Site Log...</span>
               </>
             ) : (
               <>
@@ -593,7 +542,7 @@ export const FieldWorkerDashboard: React.FC = () => {
         </form>
       </section>
 
-      {/* FIELD WORKER — MY ENTRIES LIST WITH MULTI-SELECT & BATCH SEND */}
+      {/* MY PAST SITE LOGS WITH ROUTE, LOCATION, LAT & LOG, REMARK, PHOTOS */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
@@ -603,8 +552,8 @@ export const FieldWorkerDashboard: React.FC = () => {
                 {myEntries.length}
               </span>
             </h3>
-            <p className="text-xs font-medium text-stone-500">
-              Select multiple works to share as a combined site report at once.
+            <p className="text-xs text-stone-500">
+              Select multiple entries to batch send to your manager via WhatsApp
             </p>
           </div>
 
@@ -612,8 +561,8 @@ export const FieldWorkerDashboard: React.FC = () => {
             <div className="flex items-center space-x-2">
               <button
                 type="button"
-                onClick={handleSelectAll}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 active:bg-stone-100 text-xs font-bold text-stone-700 shadow-2xs transition-colors"
+                onClick={handleToggleSelectAll}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 text-xs font-bold text-stone-700 shadow-2xs transition-colors"
               >
                 {selectedEntryIds.length === myEntries.length ? (
                   <>
@@ -631,9 +580,9 @@ export const FieldWorkerDashboard: React.FC = () => {
           )}
         </div>
 
-        {/* Floating / Sticky Batch Action Bar when entries are selected */}
+        {/* Floating Batch Action Bar */}
         {selectedEntryIds.length > 0 && (
-          <div className="sticky top-2 z-30 p-3.5 sm:p-4 rounded-2xl bg-amber-900 text-white shadow-xl border border-amber-700/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="sticky top-2 z-30 p-3.5 sm:p-4 rounded-2xl bg-stone-900 text-white shadow-xl border border-stone-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-xl bg-amber-600 flex items-center justify-center text-white font-bold flex-shrink-0">
                 <Layers className="w-4 h-4" />
@@ -650,7 +599,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-amber-200">
+                <p className="text-[11px] text-stone-300">
                   Ready to send together via WhatsApp, Telegram, or device share
                 </p>
               </div>
@@ -660,7 +609,7 @@ export const FieldWorkerDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={handleDeselectAll}
-                className="px-3 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-950 text-amber-200 text-xs font-bold transition-colors"
+                className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-bold transition-colors"
               >
                 Clear
               </button>
@@ -698,6 +647,16 @@ export const FieldWorkerDashboard: React.FC = () => {
 
               const isDone = entry.status === 'Done';
               const isSelected = selectedEntryIds.includes(entry.id);
+              const displayLocation = entry.location || entry.locationFrom;
+              const displayTitle = entry.route || entry.workType || 'Site Work Log';
+              const formattedWorkDate = entry.date
+                ? new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : null;
 
               return (
                 <div
@@ -728,7 +687,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                       <div>
                         <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                           <h4 className="text-base sm:text-lg font-black text-stone-900">
-                            {entry.workType}
+                            {displayTitle}
                           </h4>
                           {/* Status badge: Orange for Pending, Green for Done */}
                           <span
@@ -741,44 +700,82 @@ export const FieldWorkerDashboard: React.FC = () => {
                             {isDone ? '✅ Done' : '⏳ Pending'}
                           </span>
                         </div>
-                        <p className="text-xs text-stone-500 mt-0.5">Logged: {formattedDate}</p>
+                        <div className="flex items-center space-x-2 text-xs text-stone-500 mt-1 flex-wrap gap-y-1">
+                          <span className="font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center space-x-1">
+                            <Calendar className="w-3 h-3 text-amber-600" />
+                            <span>Date: {entry.date || formattedWorkDate || 'Today'}</span>
+                          </span>
+                          <span className="text-stone-400">• Logged: {formattedDate}</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Big Quantity Pill */}
-                    <div className="bg-stone-100 border border-stone-300 rounded-xl px-3 py-1.5 text-right flex-shrink-0">
-                      <span className="block text-base sm:text-lg font-black text-stone-900 leading-tight">
-                        {entry.quantity}
-                      </span>
-                      <span className="text-[10px] font-bold text-stone-500 uppercase">{entry.uom}</span>
-                    </div>
-                  </div>
-
-                  {/* Locations From -> To */}
-                  <div className="bg-stone-50 rounded-xl p-3 text-xs space-y-1.5 border border-stone-200/80 mb-3">
-                    {entry.locationFrom ? (
-                      <div className="flex items-start space-x-2">
-                        <span className="font-bold text-stone-600 flex-shrink-0">📍 From:</span>
-                        <span className="text-stone-900 font-medium break-words">
-                          {entry.locationFrom}
-                        </span>
-                      </div>
-                    ) : null}
-                    {entry.locationTo ? (
-                      <div className="flex items-start space-x-2">
-                        <span className="font-bold text-stone-600 flex-shrink-0">📍 To:</span>
-                        <span className="text-stone-900 font-medium break-words">
-                          {entry.locationTo}
-                        </span>
-                      </div>
-                    ) : null}
-                    {!entry.locationFrom && !entry.locationTo && (
-                      <div className="flex items-center space-x-1.5 text-stone-400 italic text-[11px]">
-                        <span>📍 Location: Not specified (logged off-site)</span>
+                    {/* Photo count indicator */}
+                    {entry.photos && entry.photos.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1 text-right flex-shrink-0 flex items-center space-x-1 text-amber-800">
+                        <Camera className="w-3.5 h-3.5" />
+                        <span className="text-xs font-black">{entry.photos.length} photo{entry.photos.length > 1 ? 's' : ''}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Route, Location, Lat & Log, Remark Details */}
+                  <div className="bg-stone-50 rounded-xl p-3 text-xs space-y-2 border border-stone-200/80 mb-3">
+                    {/* Work Date in Details */}
+                    {formattedWorkDate && (
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-stone-600 flex items-center space-x-1 flex-shrink-0">
+                          <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Work Date:</span>
+                        </span>
+                        <span className="font-extrabold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">
+                          {formattedWorkDate} ({entry.date})
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Route */}
+                    {entry.route && (
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-stone-600 flex items-center space-x-1 flex-shrink-0">
+                          <Navigation className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Route:</span>
+                        </span>
+                        <span className="font-extrabold text-amber-950 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200">
+                          {entry.route}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Location */}
+                    {displayLocation && (
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-stone-600 flex items-center space-x-1 flex-shrink-0">
+                          <MapPin className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Location:</span>
+                        </span>
+                        <span className="text-stone-900 font-medium break-words">
+                          {displayLocation}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Lat & Log */}
+                    {entry.latLong && (
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-stone-600 flex items-center space-x-1 flex-shrink-0">
+                          <Globe className="w-3.5 h-3.5 text-sky-600" />
+                          <span>Lat & Log:</span>
+                        </span>
+                        <span className="text-stone-900 font-bold font-mono bg-white px-2 py-0.5 rounded border border-stone-200 break-words">
+                          {entry.latLong}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Remark */}
                     {entry.remark && (
-                      <div className="pt-1 border-t border-stone-200/60 flex items-start space-x-2">
+                      <div className="pt-1 border-t border-stone-200/70 flex items-start space-x-2">
                         <span className="font-bold text-stone-600 flex-shrink-0">📝 Remark:</span>
                         <span className="text-stone-700 italic break-words">{entry.remark}</span>
                       </div>
@@ -786,26 +783,27 @@ export const FieldWorkerDashboard: React.FC = () => {
 
                     {/* Attached Photos */}
                     {entry.photos && entry.photos.length > 0 && (
-                      <div className="pt-2 border-t border-stone-200/60" onClick={(e) => e.stopPropagation()}>
+                      <div className="pt-2 border-t border-stone-200/70">
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="font-bold text-stone-700 text-[11px] flex items-center space-x-1">
                             <Camera className="w-3.5 h-3.5 text-amber-600" />
                             <span>Attached Site Photos ({entry.photos.length})</span>
                           </span>
-                          <span className="text-[10px] text-stone-400 font-semibold">Tap to enlarge</span>
+                          <span className="text-[10px] text-stone-400 font-semibold">Tap to view full</span>
                         </div>
                         <div className="flex items-center space-x-2 overflow-x-auto py-1">
                           {entry.photos.map((photo, pIdx) => (
                             <button
                               key={pIdx}
                               type="button"
-                              onClick={() =>
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setLightboxData({
-                                    photos: entry.photos || [],
+                                  photos: entry.photos || [],
                                   index: pIdx,
-                                  title: `${entry.workType} (${entry.quantity} ${entry.uom})`,
-                                })
-                              }
+                                  title: `${displayTitle} • Photo #${pIdx + 1}`,
+                                });
+                              }}
                               className="relative w-14 h-14 rounded-lg overflow-hidden border border-stone-300 flex-shrink-0 hover:scale-105 transition-transform shadow-2xs group"
                             >
                               <img
@@ -823,22 +821,23 @@ export const FieldWorkerDashboard: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Actions: Edit, Delete, Share Single */}
+                  {/* Actions Row */}
                   <div
                     className="flex items-center justify-between pt-1 border-t border-stone-100"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
                       <button
                         onClick={() => setEditingEntry(entry)}
-                        className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition-colors"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>Edit</span>
                       </button>
+
                       <button
                         onClick={() => setDeletingId(entry.id)}
-                        className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Delete</span>
@@ -873,17 +872,6 @@ export const FieldWorkerDashboard: React.FC = () => {
           </div>
         )}
       </section>
-
-      {/* Add Custom Work Type Modal */}
-      <AddWorkTypeModal
-        isOpen={isAddTypeOpen}
-        onClose={() => setIsAddTypeOpen(false)}
-        onAdd={async (name, newUom) => {
-          await addWorkType(name, newUom);
-          setSelectedWorkType(name);
-          setUom(newUom);
-        }}
-      />
 
       {/* Edit Entry Modal */}
       {editingEntry && (

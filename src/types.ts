@@ -25,14 +25,18 @@ export interface WorkEntry {
   id: string;
   uid: string;
   userName: string;
-  workType: string;
-  uom: UOMType;
-  quantity: number;
+  workType?: string;
+  uom?: UOMType;
+  quantity?: number;
   status: EntryStatus;
-  locationFrom: string;
-  locationTo: string;
+  route?: string;
+  location?: string;
+  latLong?: string;
+  locationFrom?: string;
+  locationTo?: string;
   remark?: string;
   photos?: string[];
+  date?: string; // YYYY-MM-DD format (editable, defaults to current date)
   createdAt: any;
   updatedAt?: any;
 }

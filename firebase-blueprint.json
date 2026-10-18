@@ -97,6 +97,21 @@
           "description": "Status of work entry",
           "enum": ["Pending", "Done"]
         },
+        "route": {
+          "type": "string",
+          "description": "Route, trench, line or section identifier",
+          "maxLength": 200
+        },
+        "location": {
+          "type": "string",
+          "description": "Work site address or location name",
+          "maxLength": 300
+        },
+        "latLong": {
+          "type": "string",
+          "description": "Latitude and Longitude coordinates (e.g. Lat 19.053155° Long 73.016608°)",
+          "maxLength": 200
+        },
         "locationFrom": {
           "type": "string",
           "description": "Start location or GPS coordinate",
@@ -120,6 +135,11 @@
             "type": "string"
           }
         },
+        "date": {
+          "type": "string",
+          "description": "Editable work log date (YYYY-MM-DD)",
+          "maxLength": 50
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -131,7 +151,7 @@
           "description": "Server update timestamp"
         }
       },
-      "required": ["uid", "userName", "workType", "uom", "quantity", "status", "locationFrom", "locationTo"]
+      "required": ["uid", "userName", "status"]
     }
   },
   "firestore": {

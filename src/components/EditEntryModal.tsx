@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { WorkEntry, EntryStatus, WorkTypeItem, UOMType } from '../types';
-import { X, CheckCircle2, Clock, MapPin, Loader2, Sparkles, Copy, ArrowUpDown } from 'lucide-react';
+import { WorkEntry, EntryStatus, WorkTypeItem } from '../types';
+import { X, CheckCircle2, Clock, MapPin, Loader2, Sparkles, Navigation, Calendar } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
@@ -8,7 +8,7 @@ import { PhotoGpsData } from '../utils/photoGpsExtractor';
 
 interface EditEntryModalProps {
   entry: WorkEntry;
-  workTypes: WorkTypeItem[];
+  workTypes?: WorkTypeItem[];
   isOpen: boolean;
   onClose: () => void;
   onSave: (id: string, updatedData: Partial<WorkEntry>) => Promise<void>;
@@ -16,94 +16,84 @@ interface EditEntryModalProps {
 
 export const EditEntryModal: React.FC<EditEntryModalProps> = ({
   entry,
-  workTypes,
   isOpen,
   onClose,
   onSave,
 }) => {
-  const [workType, setWorkType] = useState(entry.workType);
-  const [uom, setUom] = useState<UOMType>(entry.uom);
-  const [quantity, setQuantity] = useState<string>(String(entry.quantity));
-  const [status, setStatus] = useState<EntryStatus>(entry.status);
-  const [locationFrom, setLocationFrom] = useState(entry.locationFrom);
-  const [locationTo, setLocationTo] = useState(entry.locationTo);
-  const [remark, setRemark] = useState(entry.remark || '');
+  // Worker View Requested Fields
+  const getInitialDate = () => {
+    if (entry.date) return entry.date;
+    if (entry.createdAt?.toDate) {
+      return entry.createdAt.toDate().toLocaleDateString('en-CA');
+    }
+    return new Date().toLocaleDateString('en-CA');
+  };
+  const [date, setDate] = useState<string>(getInitialDate);
+  const [route, setRoute] = useState<string>(entry.route || '');
+  const [location, setLocation] = useState<string>(entry.location || entry.locationFrom || '');
+  const [latLong, setLatLong] = useState<string>(entry.latLong || '');
+  const [remark, setRemark] = useState<string>(entry.remark || '');
   const [photos, setPhotos] = useState<string[]>(entry.photos || []);
-  const [lightboxData, setLightboxData] = useState<{ index: number } | null>(null);
+  const [status, setStatus] = useState<EntryStatus>(entry.status);
 
+  const [lightboxData, setLightboxData] = useState<{ index: number } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [gpsLoadingFrom, setGpsLoadingFrom] = useState(false);
-  const [gpsLoadingTo, setGpsLoadingTo] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gpsNotice, setGpsNotice] = useState<string | null>(null);
-  const [lastDetectedGps, setLastDetectedGps] = useState<PhotoGpsData | null>(null);
 
   if (!isOpen) return null;
 
-  const handleWorkTypeChange = (selectedName: string) => {
-    setWorkType(selectedName);
-    const found = workTypes.find((wt) => wt.name === selectedName);
-    if (found) {
-      setUom(found.uom);
-    }
-  };
-
-  const handleCaptureGps = async (field: 'from' | 'to') => {
+  const handleCaptureLiveGps = async () => {
     setError(null);
-    if (field === 'from') setGpsLoadingFrom(true);
-    else setGpsLoadingTo(true);
+    setGpsLoading(true);
 
     try {
       const result = await captureCurrentLocation();
-      if (field === 'from') {
-        setLocationFrom(result.formattedAddress);
-      } else {
-        setLocationTo(result.formattedAddress);
-      }
+      setLocation(result.formattedAddress);
+      const coords = `Lat ${result.latitude.toFixed(6)}° Long ${result.longitude.toFixed(6)}°`;
+      setLatLong(coords);
+      setGpsNotice(`📍 Live GPS Captured: ${coords}`);
+      setTimeout(() => setGpsNotice(null), 5000);
     } catch (err: any) {
       setError(err.message || 'GPS location capture failed');
     } finally {
-      if (field === 'from') setGpsLoadingFrom(false);
-      else setGpsLoadingTo(false);
+      setGpsLoading(false);
     }
   };
 
-  const handleGpsExtracted = (gpsData: PhotoGpsData, photoIndex: number) => {
-    setLastDetectedGps(gpsData);
-    const loc = gpsData.formattedLocation;
+  const handleGpsExtracted = (gpsData: PhotoGpsData) => {
+    const coordsStr =
+      gpsData.formattedCoords || `Lat ${gpsData.latitude.toFixed(6)}° Long ${gpsData.longitude.toFixed(6)}°`;
+    const locStr = gpsData.address || gpsData.formattedLocation || gpsData.city || '';
 
-    if (photoIndex === 0) {
-      setLocationFrom(loc);
-      setLocationTo(loc);
-      setGpsNotice(`📍 Extracted GPS from Photo: Auto-filled From & To (${loc})`);
-    } else {
-      setLocationTo(loc);
-      setGpsNotice(`📍 Updated Location To with Photo #${photoIndex + 1} GPS (${loc})`);
+    setLatLong(coordsStr);
+    if (locStr) {
+      setLocation(locStr);
     }
 
-    setTimeout(() => setGpsNotice(null), 5000);
+    setGpsNotice(`📍 Auto-filled Lat & Log: ${coordsStr}`);
+    setTimeout(() => setGpsNotice(null), 6000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const num = Number(quantity);
-    if (isNaN(num) || num <= 0) {
-      setError('Please enter a valid positive quantity');
-      return;
-    }
 
     setError(null);
     setSaving(true);
     try {
       await onSave(entry.id, {
-        workType,
-        uom,
-        quantity: num,
-        status,
-        locationFrom: locationFrom.trim(),
-        locationTo: locationTo.trim(),
+        date,
+        route: route.trim(),
+        location: location.trim(),
+        latLong: latLong.trim(),
+        locationFrom: location.trim(),
         remark: remark.trim(),
         photos,
+        status,
+        workType: route.trim() || entry.workType || 'Site Work',
+        quantity: entry.quantity ?? 1,
+        uom: entry.uom || 'meter',
       });
       onClose();
     } catch (err: any) {
@@ -118,8 +108,8 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
       <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-xl border border-stone-200 my-8">
         <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-4">
           <div>
-            <h3 className="text-lg font-bold text-stone-900">Edit Work Entry</h3>
-            <p className="text-xs text-stone-500">Log ID: {entry.id}</p>
+            <h3 className="text-lg font-extrabold text-stone-900">Edit Site Work Log</h3>
+            <p className="text-xs text-stone-500">Date • Route • Location • Lat & Log • Remark • Photos</p>
           </div>
           <button
             onClick={onClose}
@@ -143,185 +133,106 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Work Type Selection */}
-          <div>
-            <label className="block text-sm font-semibold text-stone-800 mb-1">
-              Work Type
-            </label>
-            <select
-              value={workType}
-              onChange={(e) => handleWorkTypeChange(e.target.value)}
-              className="w-full px-3.5 py-3 rounded-xl border border-stone-300 text-stone-900 text-base font-medium bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
-            >
-              {workTypes.map((wt, idx) => (
-                <option key={wt.id || `${wt.name}-${idx}`} value={wt.name}>
-                  {wt.name} ({wt.uom})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Quantity & Auto-filled UOM */}
-          <div>
-            <label className="block text-sm font-semibold text-stone-800 mb-1">
-              Quantity
-            </label>
-            <div className="relative rounded-xl shadow-sm">
-              <input
-                type="number"
-                step="any"
-                required
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                className="w-full pl-3.5 pr-28 py-3 rounded-xl border border-stone-300 text-stone-900 text-base font-semibold focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
-              />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-stone-100 text-stone-700 text-xs font-bold border border-stone-200">
-                  {uom}
+          {/* Work Date Section (Editable) */}
+          <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-amber-950 flex items-center space-x-1.5">
+                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                <span>Work Date / तारीख</span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                  Editable
                 </span>
-              </div>
+              </label>
+              <button
+                type="button"
+                onClick={() => setDate(new Date().toLocaleDateString('en-CA'))}
+                className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline"
+              >
+                Set Today
+              </button>
             </div>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none transition-colors"
+            />
           </div>
 
-          {/* Status Segmented Toggle */}
+          {/* 1. Route */}
           <div>
-            <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-              Work Status
+            <label className="block text-xs font-bold text-stone-800 mb-1 flex items-center space-x-1">
+              <Navigation className="w-3.5 h-3.5 text-amber-600" />
+              <span>Route / Section</span>
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setStatus('Pending')}
-                className={`py-3 px-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center space-x-2 transition-all ${
-                  status === 'Pending'
-                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-sm'
-                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
-                }`}
-              >
-                <Clock className="w-4 h-4 text-amber-600" />
-                <span>Pending</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStatus('Done')}
-                className={`py-3 px-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center space-x-2 transition-all ${
-                  status === 'Done'
-                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm'
-                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Done</span>
-              </button>
-            </div>
+            <input
+              type="text"
+              value={route}
+              onChange={(e) => setRoute(e.target.value)}
+              placeholder="e.g. Route 4 / Nerul-Juinagar Link / Trench Section A"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+            />
           </div>
 
-          {/* Quick Helper toolbar */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-              Location / Chainage
-            </span>
-            <div className="flex items-center space-x-1.5">
-              {lastDetectedGps && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLocationFrom(lastDetectedGps.formattedLocation);
-                    setLocationTo(lastDetectedGps.formattedLocation);
-                  }}
-                  className="text-[10px] font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-300 transition-colors flex items-center space-x-1"
-                >
-                  <Sparkles className="w-2.5 h-2.5" />
-                  <span>Use Photo GPS</span>
-                </button>
-              )}
-              {locationFrom && (
-                <button
-                  type="button"
-                  onClick={() => setLocationTo(locationFrom)}
-                  className="text-[10px] font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 px-2 py-0.5 rounded border border-stone-200 transition-colors flex items-center space-x-1"
-                >
-                  <Copy className="w-2.5 h-2.5" />
-                  <span>From ➔ To</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Location From with GPS */}
+          {/* 2. Location */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-semibold text-stone-800">
-                Location From <span className="text-stone-400 font-normal text-xs">(Optional)</span>
+              <label className="block text-xs font-bold text-stone-800 flex items-center space-x-1">
+                <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                <span>Location</span>
               </label>
               <button
                 type="button"
-                onClick={() => handleCaptureGps('from')}
-                disabled={gpsLoadingFrom}
-                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300 transition-colors"
+                onClick={handleCaptureLiveGps}
+                disabled={gpsLoading}
+                className="inline-flex items-center space-x-1 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-lg border border-amber-300 transition-colors"
               >
-                {gpsLoadingFrom ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <MapPin className="w-3.5 h-3.5 text-amber-700" />
-                )}
-                <span>📍 Capture GPS</span>
+                {gpsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <MapPin className="w-3 h-3 text-amber-700" />}
+                <span>Live GPS</span>
               </button>
             </div>
             <input
               type="text"
-              value={locationFrom}
-              onChange={(e) => setLocationFrom(e.target.value)}
-              placeholder="Optional: Auto-filled from photo GPS or live GPS"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="e.g. Anirudha Bhawan, Sector 23, Juinagar, Navi Mumbai"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
             />
           </div>
 
-          {/* Location To with GPS */}
+          {/* 3. Lat & Log */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-semibold text-stone-800">
-                Location To <span className="text-stone-400 font-normal text-xs">(Optional)</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => handleCaptureGps('to')}
-                disabled={gpsLoadingTo}
-                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300 transition-colors"
-              >
-                {gpsLoadingTo ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <MapPin className="w-3.5 h-3.5 text-amber-700" />
-                )}
-                <span>📍 Capture GPS</span>
-              </button>
-            </div>
+            <label className="block text-xs font-bold text-stone-800 mb-1">
+              Lat & Log (Coordinates)
+            </label>
             <input
               type="text"
-              value={locationTo}
-              onChange={(e) => setLocationTo(e.target.value)}
-              placeholder="Optional: Auto-filled from photo GPS or live GPS"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
+              value={latLong}
+              onChange={(e) => setLatLong(e.target.value)}
+              placeholder="e.g. Lat 19.053155° Long 73.016608°"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm font-bold font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none bg-stone-50"
             />
           </div>
 
-          {/* Remark */}
+          {/* 4. Remark */}
           <div>
-            <label className="block text-sm font-semibold text-stone-800 mb-1">
-              Remark (Optional)
+            <label className="block text-xs font-bold text-stone-800 mb-1">
+              Remark / Site Notes
             </label>
             <textarea
               rows={2}
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
+              placeholder="Optional remarks or observations..."
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-stone-900 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
             />
           </div>
 
-          {/* Photos Management with GPS Extraction */}
+          {/* 5. Photos Management (Click or Upload) */}
           <div>
+            <label className="block text-xs font-bold text-stone-800 mb-1">
+              Site Photos (GPS Camera / Upload)
+            </label>
             <PhotoUploader
               photos={photos}
               onChange={setPhotos}
@@ -332,37 +243,76 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
             />
           </div>
 
+          {/* 6. Status */}
+          <div>
+            <label className="block text-xs font-bold text-stone-700 mb-1">
+              Status
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setStatus('Pending')}
+                className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center space-x-1.5 transition-all ${
+                  status === 'Pending'
+                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-black'
+                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 text-orange-600" />
+                <span>⏳ Pending</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatus('Done')}
+                className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center space-x-1.5 transition-all ${
+                  status === 'Done'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-black'
+                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>✅ Done</span>
+              </button>
+            </div>
+          </div>
+
           {/* Buttons */}
           <div className="flex space-x-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 px-4 rounded-xl border border-stone-300 font-bold text-stone-700 hover:bg-stone-100 transition-colors"
+              className="flex-1 py-3 px-4 rounded-xl border border-stone-300 font-bold text-stone-700 hover:bg-stone-100 transition-colors text-sm"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 font-bold text-white shadow-md disabled:opacity-50 transition-colors"
+              className="flex-1 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors text-sm shadow-md flex items-center justify-center space-x-2"
             >
-              {saving ? 'Updating...' : 'Save Changes'}
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Save Changes</span>
+              )}
             </button>
           </div>
         </form>
-
-        {/* Photo Lightbox */}
-        {lightboxData && (
-          <PhotoLightbox
-            isOpen={Boolean(lightboxData)}
-            photos={photos}
-            initialIndex={lightboxData.index}
-            title={`${workType} (${quantity} ${uom})`}
-            onClose={() => setLightboxData(null)}
-          />
-        )}
       </div>
+
+      {lightboxData && (
+        <PhotoLightbox
+          isOpen={Boolean(lightboxData)}
+          photos={photos}
+          initialIndex={lightboxData.index}
+          title={`${route || 'Site Work'} - Photo #${lightboxData.index + 1}`}
+          onClose={() => setLightboxData(null)}
+        />
+      )}
     </div>
   );
 };
-

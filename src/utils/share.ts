@@ -5,18 +5,24 @@ export function formatSingleEntryText(entry: WorkEntry): string {
     ? entry.createdAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : new Date().toLocaleString();
 
+  const displayLoc = entry.location || entry.locationFrom;
+  const primaryTitle = entry.route || entry.workType || 'Site Work';
+  const formattedWorkDate = entry.date
+    ? new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+
   const lines = [
     `🏗️ *CIVIL WORK SITE LOG*`,
     `━━━━━━━━━━━━━━━━━━━━`,
     `👷 *Worker:* ${entry.userName}`,
-    `📌 *Work Type:* ${entry.workType}`,
-    `📊 *Quantity:* ${entry.quantity} ${entry.uom}`,
+    formattedWorkDate ? `📅 *Date:* ${formattedWorkDate}` : '',
+    `🛣️ *Route:* ${primaryTitle}`,
+    displayLoc ? `📍 *Location:* ${displayLoc}` : '',
+    entry.latLong ? `🌐 *Lat & Log:* ${entry.latLong}` : '',
     `🚦 *Status:* ${entry.status === 'Done' ? '✅ Done' : '⏳ Pending'}`,
-    `📍 *From:* ${entry.locationFrom || 'N/A'}`,
-    `📍 *To:* ${entry.locationTo || 'N/A'}`,
     entry.remark ? `📝 *Remark:* ${entry.remark}` : '',
     entry.photos && entry.photos.length > 0 ? `📸 *Photos:* ${entry.photos.length} site photo(s) attached` : '',
-    `⏱️ *Time:* ${dateStr}`,
+    `⏱️ *Logged Time:* ${dateStr}`,
     `━━━━━━━━━━━━━━━━━━━━`,
   ].filter(Boolean);
 
@@ -47,11 +53,13 @@ export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string):
       const time = e.createdAt?.toDate
         ? e.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         : '';
+      const displayLoc = e.location || e.locationFrom;
+      const title = e.route || e.workType || 'Site Work';
       return [
-        `*#${idx + 1}* [${e.status === 'Done' ? '✅ Done' : '⏳ Pending'}] *${e.workType}*`,
-        `👷 ${e.userName} | 📏 ${e.quantity} ${e.uom}`,
-        `📍 From: ${e.locationFrom || 'N/A'}`,
-        `📍 To: ${e.locationTo || 'N/A'}`,
+        `*#${idx + 1}* [${e.status === 'Done' ? '✅ Done' : '⏳ Pending'}] *${title}*`,
+        `👷 ${e.userName}`,
+        displayLoc ? `📍 Location: ${displayLoc}` : '',
+        e.latLong ? `🌐 Lat & Log: ${e.latLong}` : '',
         e.remark ? `📝 Remark: ${e.remark}` : '',
         time ? `🕒 ${time}` : '',
       ]
@@ -92,10 +100,13 @@ export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: s
         ? e.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         : '';
       const photoNote = e.photos && e.photos.length > 0 ? ` [📸 ${e.photos.length} photo(s)]` : '';
+      const displayLoc = e.location || e.locationFrom;
+      const title = e.route || e.workType || 'Site Work';
       return [
-        `*${idx + 1}.* [${e.status === 'Done' ? '✅ DONE' : '⏳ PENDING'}] *${e.workType}*`,
-        `   📏 *Qty:* ${e.quantity} ${e.uom}${photoNote}`,
-        `   📍 *From:* ${e.locationFrom || 'N/A'} ➡️ *To:* ${e.locationTo || 'N/A'}`,
+        `*${idx + 1}.* [${e.status === 'Done' ? '✅ DONE' : '⏳ PENDING'}] *${title}*${photoNote}`,
+        e.date ? `   📅 *Work Date:* ${e.date}` : '',
+        displayLoc ? `   📍 *Location:* ${displayLoc}` : '',
+        e.latLong ? `   🌐 *Lat & Log:* ${e.latLong}` : '',
         e.remark ? `   📝 *Note:* ${e.remark}` : '',
         time ? `   🕒 *Logged:* ${time}` : '',
       ]
@@ -107,10 +118,16 @@ export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: s
   return `${header}${itemsList}\n\n━━━━━━━━━━━━━━━━━━━━\n_Generated via Civil Site Work Logger_`;
 }
 
-export function getWhatsAppUrl(text: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+export function getWhatsAppUrl(text: string, phone?: string): string {
+  const encodedText = encodeURIComponent(text);
+  if (phone) {
+    const cleanPhone = phone.replace(/\D/g, '');
+    return `https://wa.me/${cleanPhone}?text=${encodedText}`;
+  }
+  return `https://api.whatsapp.com/send?text=${encodedText}`;
 }
 
 export function getTelegramUrl(text: string): string {
-  return `https://t.me/share/url?url=${encodeURIComponent('https://civilsite.app')}&text=${encodeURIComponent(text)}`;
+  const encodedText = encodeURIComponent(text);
+  return `https://t.me/share/url?text=${encodedText}`;
 }

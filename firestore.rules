@@ -39,8 +39,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || isManager());
-      allow list: if isSignedIn() && isManager();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
       allow update: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'email']);
@@ -66,13 +66,17 @@ service cloud.firestore {
     function isValidWorkEntry(data) {
       return data.uid is string && data.uid == request.auth.uid &&
              data.userName is string && data.userName.size() > 0 && data.userName.size() <= 100 &&
-             data.workType is string && data.workType.size() > 0 && data.workType.size() <= 100 &&
-             data.uom in ['meter', 'Number'] &&
-             data.quantity is number && data.quantity > 0 &&
+             (!('workType' in data) || (data.workType is string && data.workType.size() <= 100)) &&
+             (!('uom' in data) || data.uom in ['meter', 'Number']) &&
+             (!('quantity' in data) || (data.quantity is number && data.quantity >= 0)) &&
              data.status in ['Pending', 'Done'] &&
-             data.locationFrom is string && data.locationFrom.size() > 0 && data.locationFrom.size() <= 300 &&
-             data.locationTo is string && data.locationTo.size() > 0 && data.locationTo.size() <= 300 &&
+             (!('route' in data) || (data.route is string && data.route.size() <= 200)) &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 300)) &&
+             (!('latLong' in data) || (data.latLong is string && data.latLong.size() <= 200)) &&
+             (!('locationFrom' in data) || (data.locationFrom is string && data.locationFrom.size() <= 300)) &&
+             (!('locationTo' in data) || (data.locationTo is string && data.locationTo.size() <= 300)) &&
              (!('remark' in data) || (data.remark is string && data.remark.size() <= 1000)) &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
              (!('photos' in data) || (data.photos is list && data.photos.size() <= 4));
     }
 
@@ -89,7 +93,7 @@ service cloud.firestore {
                     incoming().uid == existing().uid &&
                     incoming().userName == existing().userName &&
                     isValidWorkEntry(incoming()) &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'status', 'locationFrom', 'locationTo', 'remark', 'photos', 'updatedAt']);
+                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'status', 'route', 'location', 'latLong', 'locationFrom', 'locationTo', 'remark', 'photos', 'date', 'updatedAt']);
 
       // Delete: Field workers can delete only their own entries (Managers cannot delete workers' entries)
       allow delete: if isSignedIn() && existing().uid == request.auth.uid;

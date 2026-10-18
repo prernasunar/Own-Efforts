@@ -16,30 +16,36 @@ export interface ExcelExportOptions {
  * Formats a Firebase timestamp / Date into YYYY-MM-DD and HH:MM
  */
 export function parseEntryDateTime(entry: WorkEntry): { dateStr: string; timeStr: string; dateObj: Date | null } {
-  if (!entry.createdAt) {
-    return { dateStr: 'N/A', timeStr: 'N/A', dateObj: null };
-  }
-  let d: Date;
-  if (typeof entry.createdAt.toDate === 'function') {
-    d = entry.createdAt.toDate();
-  } else if (entry.createdAt instanceof Date) {
-    d = entry.createdAt;
-  } else if (typeof entry.createdAt === 'string' || typeof entry.createdAt === 'number') {
-    d = new Date(entry.createdAt);
-  } else {
-    return { dateStr: 'N/A', timeStr: 'N/A', dateObj: null };
+  let dateStr = entry.date || 'N/A';
+  let timeStr = 'N/A';
+  let d: Date | null = null;
+
+  if (entry.createdAt) {
+    if (typeof entry.createdAt.toDate === 'function') {
+      d = entry.createdAt.toDate();
+    } else if (entry.createdAt instanceof Date) {
+      d = entry.createdAt;
+    } else if (typeof entry.createdAt === 'string' || typeof entry.createdAt === 'number') {
+      d = new Date(entry.createdAt);
+    }
   }
 
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}-${mm}-${dd}`;
-
-  const timeStr = d.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  });
+  if (d) {
+    if (!entry.date) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      dateStr = `${yyyy}-${mm}-${dd}`;
+    }
+    timeStr = d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } else if (entry.date) {
+    dateStr = entry.date;
+    d = new Date(entry.date + 'T00:00:00');
+  }
 
   return { dateStr, timeStr, dateObj: d };
 }
@@ -126,8 +132,9 @@ function buildRowData(entry: WorkEntry, index: number) {
     'Quantity': entry.quantity,
     'Unit (UOM)': entry.uom,
     'Status': entry.status,
-    'Location From': entry.locationFrom || '',
-    'Location To': entry.locationTo || '',
+    'Route': entry.route || '',
+    'Location': entry.location || entry.locationFrom || '',
+    'Lat & Log': entry.latLong || '',
     'Remark / Notes': entry.remark || '',
     'Photos Attached': (entry.photos && entry.photos.length) || 0,
     'Entry ID': entry.id || '',
