@@ -91,7 +91,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
-        <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-xl border border-stone-200 my-auto max-h-[92vh] flex flex-col">
+        <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl border border-stone-200 my-auto max-h-[92dvh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-3.5 flex-shrink-0">
             <div className="flex items-center space-x-2">

@@ -469,7 +469,7 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-0 sm:p-4 backdrop-blur-md">
-      <div className="relative w-full h-full max-w-lg max-h-[95vh] bg-stone-950 sm:rounded-3xl overflow-hidden flex flex-col justify-between shadow-2xl border border-stone-800">
+      <div className="relative w-full h-full max-w-lg sm:max-h-[92dvh] bg-stone-950 sm:rounded-3xl overflow-hidden flex flex-col justify-between shadow-2xl border border-stone-800">
         {/* Top Header Controls */}
         <div className="absolute top-0 inset-x-0 z-20 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
           <div className="flex items-center space-x-2">
@@ -592,11 +592,14 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
         </div>
 
         {/* Bottom Shutter Capture Bar */}
-        <div className="p-4 sm:p-5 bg-stone-950 flex items-center justify-around z-20 border-t border-stone-900">
+        <div
+          className="p-4 sm:p-5 bg-stone-950 flex items-center justify-around z-20 border-t border-stone-900"
+          style={{ paddingBottom: 'calc(1rem + var(--sab))' }}
+        >
           <button
             type="button"
             onClick={onClose}
-            className="text-stone-400 hover:text-white text-xs font-bold px-3 py-2"
+            className="text-stone-400 hover:text-white text-xs font-bold px-3 py-2 transition-colors"
           >
             Cancel
           </button>
@@ -606,7 +609,7 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
             type="button"
             disabled={capturing || cameraError !== null}
             onClick={handleCapture}
-            className="w-18 h-18 rounded-full border-4 border-white bg-white/20 hover:bg-white/40 active:scale-95 transition-all flex items-center justify-center p-1.5 shadow-xl disabled:opacity-50"
+            className="w-16 h-16 sm:w-18 sm:h-18 rounded-full border-4 border-white bg-white/20 hover:bg-white/40 active:scale-95 transition-all flex items-center justify-center p-1.5 shadow-xl disabled:opacity-50"
             title="Capture Stamped GPS Photo"
           >
             <div className="w-full h-full rounded-full bg-white flex items-center justify-center shadow-md">
@@ -622,7 +625,7 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
           <button
             type="button"
             onClick={() => fileFallbackInputRef.current?.click()}
-            className="text-amber-400 hover:text-amber-300 text-xs font-bold px-3 py-2"
+            className="text-amber-400 hover:text-amber-300 text-xs font-bold px-3 py-2 transition-colors"
           >
             Gallery
           </button>

@@ -42,7 +42,8 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/90 backdrop-blur-sm p-4 text-white"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/95 backdrop-blur-sm p-3 sm:p-4 text-white"
+      style={{ paddingBottom: 'calc(1rem + var(--sab))', paddingTop: 'calc(0.75rem + var(--sat))' }}
       onClick={onClose}
     >
       {/* Top Bar */}

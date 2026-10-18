@@ -104,8 +104,8 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-xl border border-stone-200 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl border border-stone-200 my-auto max-h-[92dvh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-4">
           <div>
             <h3 className="text-lg font-extrabold text-stone-900">Edit Site Work Log</h3>

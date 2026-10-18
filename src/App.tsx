@@ -38,13 +38,13 @@ const MainApp: React.FC = () => {
         )}
       </main>
 
-      {/* Persistent Mobile Bottom Navigation Indicator / Info */}
-      <footer className="bg-stone-200/80 border-t border-stone-300/80 py-3 px-4 text-center text-xs text-stone-600">
-        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px]">
+      {/* Persistent Bottom Navigation Indicator / Info */}
+      <footer className="bg-stone-200/90 border-t border-stone-300/80 py-3 px-4 text-center text-xs text-stone-600" style={{ paddingBottom: 'calc(0.75rem + var(--sab))' }}>
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px]">
           <span>
             Logged in as <strong>{userProfile.name}</strong> ({userProfile.role})
           </span>
-          <span className="text-stone-500">Civil Engineering Site Ops PWA</span>
+          <span className="text-stone-500">Civil Engineering Site Ops PWA • Responsive on All Devices</span>
         </div>
       </footer>
     </div>

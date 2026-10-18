@@ -133,29 +133,29 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-800 to-stone-900 px-6 py-4 text-white flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-400/30">
-              <FileSpreadsheet className="w-6 h-6 text-emerald-300" />
+        <div className="bg-gradient-to-r from-emerald-800 to-stone-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+            <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-400/30 flex-shrink-0">
+              <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-300" />
             </div>
-            <div>
-              <h3 className="text-lg font-black tracking-tight text-white flex items-center space-x-2">
-                <span>Export to Excel (.xlsx)</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 font-bold">
-                  Date-Wise & User-Wise
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center space-x-2 flex-wrap">
+                <span className="truncate">Export to Excel</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 font-bold flex-shrink-0">
+                  Date & User
                 </span>
               </h3>
-              <p className="text-xs text-stone-300">
-                Customizable civil site reports for management, billing, and progress auditing
+              <p className="text-xs text-stone-300 line-clamp-1 sm:line-clamp-none">
+                Customizable civil site reports for management and billing
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5" />
           </button>

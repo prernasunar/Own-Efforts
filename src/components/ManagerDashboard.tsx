@@ -249,7 +249,7 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 font-sans">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 font-sans">
       {/* Manager Header & Overview */}
       <div className="bg-gradient-to-r from-stone-900 to-stone-800 rounded-2xl p-5 sm:p-6 text-white shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -532,13 +532,13 @@ export const ManagerDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center space-x-2 flex-shrink-0">
+              <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 flex-shrink-0 w-full sm:w-auto">
                 {/* Quick Export Current View */}
                 <button
                   type="button"
                   onClick={handleQuickExportCurrentView}
                   disabled={quickExporting || filteredEntries.length === 0}
-                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
                     filteredEntries.length === 0
                       ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
                       : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 active:bg-emerald-200'
@@ -835,7 +835,7 @@ export const ManagerDashboard: React.FC = () => {
           </div>
 
           {/* Workers Card Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workerStats.map((w) => {
               const donePercent =
                 w.totalEntries > 0 ? Math.round((w.doneEntries / w.totalEntries) * 100) : 0;
