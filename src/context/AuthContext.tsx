@@ -1,13 +1,23 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { getSupabaseClient, isSupabaseConfigured, supabaseDb } from '../lib/supabase';
+import { auth, db, isFirebaseConfigured } from '../lib/firebase';
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  signInAnonymously,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AuthContextType {
   user: any | null;
   userProfile: UserProfile | null;
   loading: boolean;
   isConfigured: boolean;
-  backendProvider: 'supabase' | 'local';
+  backendProvider: 'firebase' | 'supabase' | 'local';
   signIn: (email: string, pass: string, autoRegister?: boolean, role?: UserRole) => Promise<void>;
   signInWithGoogle: (preferredRole?: UserRole) => Promise<void>;
   signUp: (name: string, email: string, pass: string, role: UserRole) => Promise<void>;
@@ -28,14 +38,105 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const supabaseClient = getSupabaseClient();
   const isSupabase = isSupabaseConfigured() && Boolean(supabaseClient);
+  const isFirebase = isFirebaseConfigured() && Boolean(auth);
 
-  const backendProvider: 'supabase' | 'local' = isSupabase ? 'supabase' : 'local';
+  const backendProvider: 'firebase' | 'supabase' | 'local' = isFirebase
+    ? 'firebase'
+    : isSupabase
+    ? 'supabase'
+    : 'local';
 
   useEffect(() => {
     let isMounted = true;
 
-    const initAuth = async () => {
-      // 1. Check Supabase Auth session
+    // 1. Firebase Auth listener (Primary cloud backend)
+    if (isFirebase && auth) {
+      const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+        if (!isMounted) return;
+
+        if (fbUser) {
+          try {
+            let profile: UserProfile | null = null;
+            if (db) {
+              try {
+                const userDocSnap = await getDoc(doc(db, 'users', fbUser.uid));
+                if (userDocSnap.exists()) {
+                  const data = userDocSnap.data();
+                  profile = {
+                    uid: fbUser.uid,
+                    name: data.name || fbUser.displayName || 'Field Worker',
+                    email: data.email || fbUser.email || '',
+                    role: (data.role as UserRole) || 'Field Worker',
+                  };
+                }
+              } catch (readErr) {
+                console.warn('Could not read user profile from Firestore:', readErr);
+              }
+            }
+
+            if (!profile) {
+              const savedUser = localStorage.getItem(LOCAL_USER_KEY);
+              const parsed = savedUser ? JSON.parse(savedUser) : null;
+              const isManagerEmail = fbUser.email?.toLowerCase() === 'prernasunar@gmail.com';
+              profile = {
+                uid: fbUser.uid,
+                name:
+                  fbUser.displayName ||
+                  parsed?.name ||
+                  fbUser.email?.split('@')[0] ||
+                  (fbUser.isAnonymous ? 'Field Worker (Guest)' : 'Field Worker'),
+                email: fbUser.email || parsed?.email || (fbUser.isAnonymous ? 'guest@site.work' : ''),
+                role: isManagerEmail ? 'Manager' : (parsed?.role as UserRole) || 'Field Worker',
+              };
+
+              if (db) {
+                try {
+                  await setDoc(doc(db, 'users', fbUser.uid), {
+                    name: profile.name,
+                    role: profile.role,
+                    email: profile.email,
+                    createdAt: serverTimestamp(),
+                  });
+                } catch (writeErr) {
+                  console.warn('Could not save user profile to Firestore:', writeErr);
+                }
+              }
+            }
+
+            if (isMounted) {
+              setUser(fbUser);
+              setUserProfile(profile);
+              localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+              setLoading(false);
+            }
+          } catch (err) {
+            console.error('Error handling Firebase auth state change:', err);
+            if (isMounted) setLoading(false);
+          }
+        } else {
+          // If no Firebase user, check local session
+          const savedUser = localStorage.getItem(LOCAL_USER_KEY);
+          if (savedUser && isMounted) {
+            try {
+              const parsed = JSON.parse(savedUser);
+              setUser({ uid: parsed.uid, email: parsed.email, displayName: parsed.name });
+              setUserProfile(parsed);
+            } catch {
+              localStorage.removeItem(LOCAL_USER_KEY);
+            }
+          }
+          if (isMounted) setLoading(false);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        unsubscribe();
+      };
+    }
+
+    // 2. Fallback Supabase / Local
+    const initFallbackAuth = async () => {
       if (isSupabase && supabaseClient) {
         try {
           const { data } = await supabaseClient.auth.getSession();
@@ -58,7 +159,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 2. Check Saved Local Session
       const savedUser = localStorage.getItem(LOCAL_USER_KEY);
       if (savedUser && isMounted) {
         try {
@@ -75,8 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isMounted) setLoading(false);
     };
 
-    initAuth();
-  }, [isSupabase]);
+    initFallbackAuth();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isFirebase, isSupabase]);
 
   const signIn = async (email: string, pass: string, autoRegister: boolean = true, defaultRole: UserRole = 'Field Worker') => {
     setLoading(true);
@@ -89,7 +193,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (error) {
-          // If login credentials invalid, seamlessly try to auto-sign-up if autoRegister is true
           if (error.message.includes('Invalid login credentials') && autoRegister) {
             try {
               const guessedName = cleanEmail.split('@')[0];
@@ -119,18 +222,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             throw new Error(
               'Invalid password or account not found. If this is your first time signing in, click "Create Account" or use 1-Click Instant Access below.'
             );
-          } else if (error.message.includes('Email not confirmed')) {
-            // If email is not confirmed, grant seamless entry with local profile while Supabase confirmation is pending
-            const profile: UserProfile = {
-              uid: 'sb_pending_' + Math.random().toString(36).substring(2, 9),
-              name: cleanEmail.split('@')[0],
-              email: cleanEmail,
-              role: defaultRole,
-            };
-            setUser({ uid: profile.uid, email: cleanEmail, displayName: profile.name });
-            setUserProfile(profile);
-            localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-            return;
           }
           throw new Error(error.message);
         }
@@ -153,7 +244,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Fallback local session (works seamlessly without backend required)
+      // If Firebase is active, try anonymous sign in to back the session
+      if (isFirebase && auth) {
+        try {
+          const cred = await signInAnonymously(auth);
+          const fbUser = cred.user;
+          const profile: UserProfile = {
+            uid: fbUser.uid,
+            name: cleanEmail.split('@')[0],
+            email: cleanEmail,
+            role: defaultRole,
+          };
+          if (db) {
+            try {
+              await setDoc(doc(db, 'users', fbUser.uid), {
+                name: profile.name,
+                role: profile.role,
+                email: profile.email,
+                createdAt: serverTimestamp(),
+              });
+            } catch {}
+          }
+          setUser(fbUser);
+          setUserProfile(profile);
+          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+          return;
+        } catch (anonErr) {
+          console.warn('Firebase anonymous login attempt notice:', anonErr);
+        }
+      }
+
+      // Local session
       const existingUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
       const found = Object.values(existingUsers).find(
         (u: any) => u.email?.toLowerCase() === cleanEmail.toLowerCase()
@@ -190,7 +311,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (error) {
           if (error.message.includes('User already registered')) {
-            // If already registered, try signing in with those credentials
             return await signIn(cleanEmail, pass, false, role);
           }
           throw new Error(error.message);
@@ -203,6 +323,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserProfile(profile);
           localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
           return;
+        }
+      }
+
+      if (isFirebase && auth) {
+        try {
+          const cred = await signInAnonymously(auth);
+          const fbUser = cred.user;
+          const profile: UserProfile = { uid: fbUser.uid, name: cleanName, email: cleanEmail, role };
+          if (db) {
+            try {
+              await setDoc(doc(db, 'users', fbUser.uid), {
+                name: cleanName,
+                role,
+                email: cleanEmail,
+                createdAt: serverTimestamp(),
+              });
+            } catch {}
+          }
+          setUser(fbUser);
+          setUserProfile(profile);
+          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+          return;
+        } catch (anonErr) {
+          console.warn('Firebase anonymous signup fallback:', anonErr);
         }
       }
 
@@ -222,6 +366,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async (preferredRole?: UserRole) => {
     const roleToAssign = preferredRole || 'Field Worker';
+
+    // 1. Firebase Google Auth
+    if (isFirebase && auth) {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const cred = await signInWithPopup(auth, provider);
+      const fbUser = cred.user;
+
+      const isManagerEmail = fbUser.email?.toLowerCase() === 'prernasunar@gmail.com';
+      let profile: UserProfile = {
+        uid: fbUser.uid,
+        name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Field Worker',
+        email: fbUser.email || '',
+        role: isManagerEmail ? 'Manager' : roleToAssign,
+      };
+
+      if (db) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            profile = {
+              uid: fbUser.uid,
+              name: data.name || profile.name,
+              email: data.email || profile.email,
+              role: (data.role as UserRole) || profile.role,
+            };
+          } else {
+            await setDoc(doc(db, 'users', fbUser.uid), {
+              name: profile.name,
+              role: profile.role,
+              email: profile.email,
+              createdAt: serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          console.warn('Firestore profile sync error on Google sign in:', e);
+        }
+      }
+
+      setUser(fbUser);
+      setUserProfile(profile);
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+      return;
+    }
+
     if (isSupabase && supabaseClient) {
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
@@ -232,11 +422,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw new Error(error.message);
       return;
     }
+
     // Instant fallback
     await instantLogin(roleToAssign);
   };
 
   const instantLogin = async (role: UserRole, customName?: string) => {
+    // 1. Try Firebase anonymous authentication so Firestore operations have a valid auth session
+    if (isFirebase && auth) {
+      try {
+        const cred = await signInAnonymously(auth);
+        const fbUser = cred.user;
+        const profile: UserProfile = {
+          uid: fbUser.uid,
+          name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Supervisor'),
+          email: `${role.toLowerCase().replace(' ', '.')}@site.work`,
+          role,
+        };
+
+        if (db) {
+          try {
+            await setDoc(doc(db, 'users', fbUser.uid), {
+              name: profile.name,
+              role: profile.role,
+              email: profile.email,
+              createdAt: serverTimestamp(),
+            });
+          } catch (e) {
+            console.warn('Could not store anonymous user in Firestore:', e);
+          }
+        }
+
+        setUser(fbUser);
+        setUserProfile(profile);
+        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+        return;
+      } catch (anonErr: any) {
+        console.warn('Firebase anonymous sign in notice (falling back to local demo session):', anonErr.message);
+      }
+    }
+
+    // Fallback: Local demo session
     const uid = 'demo_' + role.toLowerCase().replace(' ', '_') + '_' + Math.random().toString(36).substring(2, 6);
     const profile: UserProfile = {
       uid,
@@ -250,6 +476,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    if (isFirebase && auth) {
+      await firebaseSignOut(auth).catch(() => {});
+    }
     if (isSupabase && supabaseClient) {
       await supabaseClient.auth.signOut().catch(() => {});
     }
@@ -263,6 +492,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = { ...userProfile, role };
     setUserProfile(updated);
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(updated));
+
+    if (isFirebase && db && auth?.currentUser) {
+      try {
+        await setDoc(doc(db, 'users', auth.currentUser.uid), { role }, { merge: true });
+      } catch (e) {
+        console.warn('Could not update role in Firestore:', e);
+      }
+    }
+
     if (isSupabase) {
       await supabaseDb.upsertProfile(updated);
     }
@@ -274,7 +512,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         userProfile,
         loading,
-        isConfigured: isSupabase,
+        isConfigured: isFirebase || isSupabase,
         backendProvider,
         signIn,
         signInWithGoogle,

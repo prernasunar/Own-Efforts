@@ -124,7 +124,7 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
 ];
 
 export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { userProfile } = useAuth();
+  const { userProfile, user } = useAuth();
   const [customWorkTypes, setCustomWorkTypes] = useState<WorkTypeItem[]>([]);
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>(INITIAL_DEMO_WORKERS);
@@ -170,9 +170,25 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return Array.from(map.values());
   }, [registeredUsers, entries, userProfile]);
 
-  // Real-time Firestore synchronization
+  // Real-time Firestore synchronization (Active only when user is authenticated with Firebase)
   useEffect(() => {
     if (!isFirebase || !db) return;
+
+    // As mandated by Firebase skill: Only attach onSnapshot listeners if user is authenticated
+    if (!auth?.currentUser) {
+      const localSaved = localStorage.getItem(LOCAL_ENTRIES_KEY);
+      if (localSaved) {
+        try {
+          setEntries(JSON.parse(localSaved));
+        } catch {
+          setEntries(INITIAL_DEMO_ENTRIES);
+        }
+      } else {
+        setEntries(INITIAL_DEMO_ENTRIES);
+      }
+      setLoading(false);
+      return;
+    }
 
     let unsubscribeEntries = () => {};
     let unsubscribeTypes = () => {};
@@ -202,13 +218,13 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 locationTo: data.locationTo || '',
                 remark: data.remark || '',
                 photos: data.photos || [],
+                date: data.date,
                 createdAt: data.createdAt || { toDate: () => new Date() },
                 updatedAt: data.updatedAt,
               };
             });
             setEntries(list);
           } else {
-            // If cloud DB is empty, use initial demo entries
             const localSaved = localStorage.getItem(LOCAL_ENTRIES_KEY);
             setEntries(localSaved ? JSON.parse(localSaved) : INITIAL_DEMO_ENTRIES);
           }
@@ -216,7 +232,6 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         },
         (error) => {
           console.warn('Firestore entries snapshot warning, falling back to local storage:', error.message);
-          // Fallback to local storage
           const saved = localStorage.getItem(LOCAL_ENTRIES_KEY);
           if (saved) {
             try {
@@ -287,7 +302,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       unsubscribeTypes();
       unsubscribeUsers();
     };
-  }, [isFirebase]);
+  }, [isFirebase, user]);
 
   const loadData = useCallback(async () => {
     if (isFirebase) return; // Managed by onSnapshot
@@ -388,13 +403,15 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       throw new Error(`Work type "${trimmedName}" already exists.`);
     }
 
-    if (isFirebase && db) {
+    const hasAuth = Boolean(isFirebase && db && auth?.currentUser);
+
+    if (hasAuth && db && auth?.currentUser) {
       try {
         await addDoc(collection(db, 'workTypes'), {
           name: trimmedName,
           uom,
-          createdBy: userProfile?.name || 'Field Worker',
-          creatorUid: auth?.currentUser?.uid || userProfile?.uid || 'anonymous',
+          createdBy: auth.currentUser.displayName || userProfile?.name || 'Field Worker',
+          creatorUid: auth.currentUser.uid,
           createdAt: serverTimestamp(),
         });
         return;
@@ -442,8 +459,11 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     photos?: string[];
     date?: string;
   }): Promise<string> => {
-    const uid = userProfile?.uid || auth?.currentUser?.uid || 'user_worker';
-    const userName = userProfile?.name || 'Field Worker';
+    const hasAuth = Boolean(isFirebase && db && auth?.currentUser);
+    const uid = hasAuth && auth?.currentUser ? auth.currentUser.uid : (userProfile?.uid || 'user_worker');
+    const userName = (hasAuth && auth?.currentUser?.displayName)
+      ? auth.currentUser.displayName
+      : (userProfile?.name || 'Field Worker');
     const todayDate = new Date().toLocaleDateString('en-CA');
 
     const payload = {
@@ -463,7 +483,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       date: entryData.date || todayDate,
     };
 
-    if (isFirebase && db) {
+    if (hasAuth && db) {
       try {
         const docRef = await addDoc(collection(db, 'entries'), {
           ...payload,
@@ -484,7 +504,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
 
-    // Local Fallback
+    // Local Fallback (used when unauthenticated, offline or in guest mode)
     const id = 'entry_' + Date.now();
     const newEntry: WorkEntry = {
       id,
@@ -507,7 +527,8 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateEntry = async (id: string, entryData: Partial<WorkEntry>) => {
-    if (isFirebase && db && !id.startsWith('demo_') && !id.startsWith('entry_')) {
+    const hasAuth = Boolean(isFirebase && db && auth?.currentUser);
+    if (hasAuth && db && !id.startsWith('demo_') && !id.startsWith('entry_')) {
       try {
         const cleanPayload: any = { updatedAt: serverTimestamp() };
         if (entryData.workType !== undefined) cleanPayload.workType = entryData.workType;
@@ -553,7 +574,8 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteEntry = async (id: string) => {
-    if (isFirebase && db && !id.startsWith('demo_') && !id.startsWith('entry_')) {
+    const hasAuth = Boolean(isFirebase && db && auth?.currentUser);
+    if (hasAuth && db && !id.startsWith('demo_') && !id.startsWith('entry_')) {
       try {
         await deleteDoc(doc(db, 'entries', id));
         return;

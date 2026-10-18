@@ -28,14 +28,18 @@ service cloud.firestore {
     }
 
     function isManager() {
-      return isSignedIn() && getUserRole() == 'Manager';
+      return isSignedIn() && (
+        (request.auth.token.email == 'prernasunar@gmail.com') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole() == 'Manager')
+      );
     }
 
     // Users Collection Rules
     function isValidUser(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.role in ['Field Worker', 'Manager'] &&
-             (!('email' in data) || (data.email is string && data.email.size() <= 150));
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string);
     }
 
     match /users/{userId} {
@@ -52,7 +56,8 @@ service cloud.firestore {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.uom in ['meter', 'Number'] &&
              (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 100)) &&
-             (!('creatorUid' in data) || (data.creatorUid is string && data.creatorUid == request.auth.uid));
+             (!('creatorUid' in data) || (data.creatorUid is string && data.creatorUid == request.auth.uid)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string);
     }
 
     match /workTypes/{typeId} {
@@ -77,7 +82,9 @@ service cloud.firestore {
              (!('locationTo' in data) || (data.locationTo is string && data.locationTo.size() <= 300)) &&
              (!('remark' in data) || (data.remark is string && data.remark.size() <= 1000)) &&
              (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
-             (!('photos' in data) || (data.photos is list && data.photos.size() <= 4));
+             (!('photos' in data) || (data.photos is list && data.photos.size() <= 4)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     match /entries/{entryId} {

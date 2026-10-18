@@ -42,12 +42,23 @@ export const db: Firestore = FIREBASE_CONFIG.firestoreDatabaseId
 export const auth: Auth = getAuth(app);
 export const appInstance = app;
 
-// Safe lazy connection checker
+// Safe lazy connection checker as mandated by Firebase skill
+export async function testConnection() {
+  if (!db) return;
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Please check your Firebase configuration.');
+    }
+  }
+}
+testConnection();
+
 export async function checkFirestoreConnection() {
   if (!db) return false;
   try {
-    const { getDoc } = await import('firebase/firestore');
-    await getDoc(doc(db, 'test', 'connection'));
+    await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch {
     return false;
