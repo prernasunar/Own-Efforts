@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, CheckCircle2, Database } from 'lucide-react';
+import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 import { UserRole } from '../types';
-import { SupabaseConfigModal } from './SupabaseConfigModal';
 
 export const AuthView: React.FC = () => {
   const { signIn, signUp, signInWithGoogle, instantLogin } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -422,13 +420,6 @@ export const AuthView: React.FC = () => {
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
                 <span>Instant 1-Click Access</span>
               </p>
-              <button
-                type="button"
-                onClick={() => setShowSupabaseModal(true)}
-                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 flex items-center space-x-1"
-              >
-                <span>Supabase Setup</span>
-              </button>
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <button
@@ -471,11 +462,6 @@ export const AuthView: React.FC = () => {
           </div>
         </div>
       </div>
-
-      <SupabaseConfigModal
-        isOpen={showSupabaseModal}
-        onClose={() => setShowSupabaseModal(false)}
-      />
     </div>
   );
 };

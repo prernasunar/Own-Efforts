@@ -32,7 +32,7 @@ app.post('/api/extract-gps', async (req, res) => {
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: {
         parts: [
           {
