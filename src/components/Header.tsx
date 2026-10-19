@@ -11,7 +11,7 @@ export const Header: React.FC = () => {
 
   const handleToggleRole = () => {
     if (!userProfile) return;
-    const nextRole: UserRole = userProfile.role === 'Field Worker' ? 'Manager' : 'Field Worker';
+    const nextRole: UserRole = userProfile.role === 'Manager' ? 'Field Executive' : 'Manager';
     updateUserRole(nextRole);
   };
 
@@ -43,7 +43,7 @@ export const Header: React.FC = () => {
                 </span>
                 <span>•</span>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-700/70 text-[10px] sm:text-[11px] font-bold tracking-wide border border-amber-400/30 flex-shrink-0">
-                  {userProfile?.role === 'Manager' ? '👔 Manager' : '👷 Worker'}
+                  {userProfile?.role === 'Manager' ? '👔 Manager' : '👷 Field Executive'}
                 </span>
               </div>
             </div>
@@ -54,18 +54,18 @@ export const Header: React.FC = () => {
             {/* Quick Role Switcher */}
             <button
               onClick={handleToggleRole}
-              title={`Switch to ${userProfile?.role === 'Field Worker' ? 'Manager' : 'Field Worker'} View`}
+              title={`Switch to ${userProfile?.role === 'Manager' ? 'Field Executive' : 'Manager'} View`}
               className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-700/75 hover:bg-amber-700 active:bg-amber-800 text-white border border-amber-400/35 transition-all shadow-xs active:scale-95 cursor-pointer"
             >
-              {userProfile?.role === 'Field Worker' ? (
+              {userProfile?.role === 'Manager' ? (
                 <>
-                  <Users className="w-3.5 h-3.5 text-amber-200" />
-                  <span className="hidden sm:inline">Manager View</span>
+                  <HardHat className="w-3.5 h-3.5 text-amber-200" />
+                  <span className="hidden sm:inline">Executive View</span>
                 </>
               ) : (
                 <>
-                  <HardHat className="w-3.5 h-3.5 text-amber-200" />
-                  <span className="hidden sm:inline">Worker View</span>
+                  <Users className="w-3.5 h-3.5 text-amber-200" />
+                  <span className="hidden sm:inline">Manager View</span>
                 </>
               )}
             </button>

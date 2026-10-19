@@ -491,7 +491,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const profile: UserProfile = {
           uid: fbUser.uid,
-          name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Supervisor'),
+          name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Executive'),
           email: demoEmail,
           role,
         };
@@ -526,7 +526,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const uid = 'demo_' + role.toLowerCase().replace(' ', '_') + '_' + Math.random().toString(36).substring(2, 6);
     const profile: UserProfile = {
       uid,
-      name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Supervisor'),
+      name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Executive'),
       email: `${role.toLowerCase().replace(' ', '.')}@site.work`,
       role,
     };

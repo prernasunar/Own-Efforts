@@ -263,7 +263,7 @@ export const FieldWorkerDashboard: React.FC = () => {
       <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 rounded-2xl p-4 sm:p-6 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div className="min-w-0">
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-700/80 text-[10px] sm:text-[11px] font-black uppercase tracking-wider mb-1 border border-amber-400/30">
-            👷 Active Field Worker
+            👷 Active Field Executive
           </span>
           <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight truncate">
             {userProfile?.name || user?.displayName || 'Site Engineer'}

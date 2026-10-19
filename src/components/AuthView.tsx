@@ -10,7 +10,7 @@ export const AuthView: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('Field Worker');
+  const [role, setRole] = useState<UserRole>('Field Executive');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,16 +105,16 @@ export const AuthView: React.FC = () => {
 
   // Quick Demo Autofills
   const handleQuickDemo = (demoRole: UserRole) => {
-    if (demoRole === 'Field Worker') {
-      setEmail('worker@civilsite.com');
-      setPassword('worker123');
-      setName('Rajesh Kumar');
-      setRole('Field Worker');
-    } else {
+    if (demoRole === 'Manager') {
       setEmail('manager@civilsite.com');
       setPassword('manager123');
       setName('Vikram Singh');
       setRole('Manager');
+    } else {
+      setEmail('worker@civilsite.com');
+      setPassword('worker123');
+      setName('Rajesh Kumar');
+      setRole('Field Executive');
     }
   };
 
@@ -215,15 +215,15 @@ export const AuthView: React.FC = () => {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setRole('Field Worker')}
+                onClick={() => setRole('Field Executive')}
                 className={`py-2 px-3 rounded-xl border-2 text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${
-                  role === 'Field Worker'
+                  role !== 'Manager'
                     ? 'border-amber-600 bg-amber-50 text-amber-900 shadow-xs'
                     : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
                 }`}
               >
                 <HardHat className="w-4 h-4 text-amber-600" />
-                <span>Field Worker</span>
+                <span>Field Executive</span>
               </button>
               <button
                 type="button"
@@ -344,9 +344,9 @@ export const AuthView: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setRole('Field Worker')}
+                    onClick={() => setRole('Field Executive')}
                     className={`p-3.5 rounded-xl border-2 text-left flex flex-col items-start transition-all ${
-                      role === 'Field Worker'
+                      role !== 'Manager'
                         ? 'border-amber-600 bg-amber-50/70 shadow-sm'
                         : 'border-stone-200 bg-stone-50 hover:bg-stone-100'
                     }`}
@@ -354,18 +354,18 @@ export const AuthView: React.FC = () => {
                     <div className="flex items-center justify-between w-full mb-1">
                       <HardHat
                         className={`w-5 h-5 ${
-                          role === 'Field Worker' ? 'text-amber-600' : 'text-stone-500'
+                          role !== 'Manager' ? 'text-amber-600' : 'text-stone-500'
                         }`}
                       />
                       <span
                         className={`w-3.5 h-3.5 rounded-full border-2 ${
-                          role === 'Field Worker'
+                          role !== 'Manager'
                             ? 'border-amber-600 bg-amber-600'
                             : 'border-stone-400'
                         }`}
                       />
                     </div>
-                    <span className="font-bold text-sm text-stone-900">Field Worker</span>
+                    <span className="font-bold text-sm text-stone-900">Field Executive</span>
                     <span className="text-[11px] text-stone-500 mt-0.5 leading-tight">
                       Log daily site work & GPS
                     </span>
@@ -424,11 +424,11 @@ export const AuthView: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 mb-2">
               <button
                 type="button"
-                onClick={() => handleInstantAccess('Field Worker')}
+                onClick={() => handleInstantAccess('Field Executive')}
                 disabled={loading}
                 className="p-2.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-xl border border-amber-300 text-center transition-all shadow-xs disabled:opacity-50"
               >
-                👷 Instant Worker
+                👷 Instant Executive
               </button>
               <button
                 type="button"
@@ -444,10 +444,10 @@ export const AuthView: React.FC = () => {
               <div className="space-x-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickDemo('Field Worker')}
+                  onClick={() => handleQuickDemo('Field Executive')}
                   className="underline hover:text-amber-800 font-semibold"
                 >
-                  Fill Worker
+                  Fill Executive
                 </button>
                 <span>•</span>
                 <button

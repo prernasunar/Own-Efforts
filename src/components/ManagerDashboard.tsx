@@ -461,7 +461,7 @@ export const ManagerDashboard: React.FC = () => {
           >
             <span className="text-xs font-bold text-stone-400 uppercase tracking-wide flex items-center space-x-1">
               <Users className="w-3.5 h-3.5" />
-              <span>Team Workers</span>
+              <span>Field Executives</span>
             </span>
             <span className="text-2xl font-black text-amber-400 mt-1">
               {uniqueWorkerNames.length}
@@ -473,17 +473,17 @@ export const ManagerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* REGISTERED SITE FIELD WORKERS SECTION (Always visible on Manager Dashboard) */}
+      {/* REGISTERED SITE FIELD EXECUTIVES SECTION (Always visible on Manager Dashboard) */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-sm space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-amber-600" />
             <h3 className="font-black text-stone-900 text-sm sm:text-base">
-              Site Field Workers Team ({workerStats.length} Registered)
+              Site Field Executives Team ({workerStats.length} Registered)
             </h3>
           </div>
           <span className="text-xs text-stone-500 font-medium">
-            Tap a worker below to filter logs or view status
+            Tap an executive below to filter logs or view status
           </span>
         </div>
 
@@ -545,7 +545,7 @@ export const ManagerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* VIEW SWITCHER: All Field Logs Feed vs Field Workers Directory */}
+      {/* VIEW SWITCHER: All Field Logs Feed vs Field Executives Directory */}
       <div className="flex items-center space-x-2 bg-stone-200/90 p-1.5 rounded-2xl border border-stone-300 shadow-inner">
         <button
           type="button"
@@ -570,7 +570,7 @@ export const ManagerDashboard: React.FC = () => {
           }`}
         >
           <Users className="w-4 h-4 text-amber-400" />
-          <span>Field Workers Directory ({workerStats.length})</span>
+          <span>Field Executives Directory ({workerStats.length})</span>
         </button>
       </div>
 
@@ -584,7 +584,7 @@ export const ManagerDashboard: React.FC = () => {
                 <span className="text-2xl">👷</span>
                 <div>
                   <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">
-                    Filtered by Worker:
+                    Filtered by Field Executive:
                   </span>
                   <p className="font-extrabold text-sm sm:text-base text-amber-950">
                     {selectedWorker}{' '}
@@ -601,14 +601,14 @@ export const ManagerDashboard: React.FC = () => {
                   onClick={() => handleShareWorkerSummary(selectedWorker)}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 transition-colors cursor-pointer"
                 >
-                  Share Worker Summary
+                  Share Executive Summary
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedWorker('ALL')}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-100 text-stone-800 border border-amber-300 transition-colors cursor-pointer"
                 >
-                  View All Workers
+                  View All Executives
                 </button>
               </div>
             </div>
@@ -692,14 +692,14 @@ export const ManagerDashboard: React.FC = () => {
               {/* Filter by Worker */}
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1">
-                  Filter by Worker ({uniqueWorkerNames.length} Workers)
+                  Filter by Field Executive ({uniqueWorkerNames.length} Executives)
                 </label>
                 <select
                   value={selectedWorker}
                   onChange={(e) => setSelectedWorker(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm font-semibold bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 >
-                  <option value="ALL">👥 All Field Workers ({uniqueWorkerNames.length})</option>
+                  <option value="ALL">👥 All Field Executives ({uniqueWorkerNames.length})</option>
                   {uniqueWorkerNames.map((name) => {
                     const count = entries.filter(
                       (e) => (e.userName || '').trim().toLowerCase() === name.trim().toLowerCase()
@@ -885,12 +885,12 @@ export const ManagerDashboard: React.FC = () => {
                     </span>
                   ) : uniqueWorkerNames.length > 0 ? (
                     <span>
-                      Your site team workers (<strong>{uniqueWorkerNames.join(', ')}</strong>) are registered and connected to the cloud site database.
-                      As soon as any field worker submits a work log today, it will appear here in real time.
+                      Your site field executives (<strong>{uniqueWorkerNames.join(', ')}</strong>) are registered and connected to the cloud site database.
+                      As soon as any field executive submits a work log today, it will appear here in real time.
                     </span>
                   ) : (
                     <span>
-                      No work entries have been submitted yet. When field workers log site work, it will appear here in real time.
+                      No work entries have been submitted yet. When field executives log site work, it will appear here in real time.
                     </span>
                   )}
                 </p>
@@ -909,7 +909,7 @@ export const ManagerDashboard: React.FC = () => {
                     onClick={() => setShowAddWorkerModal(true)}
                     className="px-4 py-2 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 transition-colors cursor-pointer"
                   >
-                    + Add Field Worker
+                    + Add Field Executive
                   </button>
                 </div>
               </div>
@@ -1125,14 +1125,14 @@ export const ManagerDashboard: React.FC = () => {
         </>
       )}
 
-      {/* TAB 2: FIELD WORKERS DIRECTORY & PERFORMANCE ROSTER */}
+      {/* TAB 2: FIELD EXECUTIVES DIRECTORY & PERFORMANCE ROSTER */}
       {activeTab === 'workers' && (
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
             <div>
               <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight flex items-center space-x-2">
                 <Users className="w-5 h-5 text-amber-600" />
-                <span>Field Workers Roster ({workerStats.length} Workers)</span>
+                <span>Field Executives Roster ({workerStats.length} Executives)</span>
               </h3>
               <p className="text-xs font-medium text-stone-500">
                 Complete overview of all field personnel and individual work logs
@@ -1145,7 +1145,7 @@ export const ManagerDashboard: React.FC = () => {
                 className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-stone-950 text-xs font-black shadow-xs transition-colors cursor-pointer"
               >
                 <UserPlus className="w-4 h-4 text-stone-950" />
-                <span>+ Add Field Worker</span>
+                <span>+ Add Field Executive</span>
               </button>
 
               <button
@@ -1186,7 +1186,7 @@ export const ManagerDashboard: React.FC = () => {
                           <div className="flex items-center space-x-2">
                             <h4 className="text-base font-extrabold text-stone-900">{w.name}</h4>
                             <span className="text-[11px] px-2 py-0.5 rounded bg-stone-100 text-stone-600 font-semibold border border-stone-200">
-                              {w.role}
+                              {w.role === 'Field Worker' ? 'Field Executive' : (w.role || 'Field Executive')}
                             </span>
                           </div>
                           <p className="text-xs text-stone-500 truncate max-w-[200px]">{w.email}</p>

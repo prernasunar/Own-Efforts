@@ -11,7 +11,7 @@ interface AddWorkerModalProps {
 export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose, onAdd }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<UserRole>('Field Worker');
+  const [role, setRole] = useState<UserRole>('Field Executive');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
     e.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) {
-      setError('Please enter field worker full name');
+      setError('Please enter field executive full name');
       return;
     }
 
@@ -36,7 +36,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
         role,
       });
 
-      setSuccessNotice(`Worker "${cleanName}" added successfully!`);
+      setSuccessNotice(`Field Executive "${cleanName}" added successfully!`);
       setTimeout(() => {
         setName('');
         setEmail('');
@@ -44,7 +44,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
         onClose();
       }, 1200);
     } catch (err: any) {
-      setError(err.message || 'Failed to add field worker to team');
+      setError(err.message || 'Failed to add field executive to team');
     } finally {
       setSubmitting(false);
     }
@@ -59,8 +59,8 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
               <UserPlus className="w-5 h-5 text-amber-700" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-stone-900">Add New Field Worker</h3>
-              <p className="text-xs text-stone-500">Register field worker to track their site logs</p>
+              <h3 className="text-base sm:text-lg font-black text-stone-900">Add New Field Executive</h3>
+              <p className="text-xs text-stone-500">Register field executive to track their site logs</p>
             </div>
           </div>
           <button
@@ -89,14 +89,14 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-stone-800 uppercase tracking-wide mb-1.5">
-              Worker Full Name <span className="text-rose-500">*</span>
+              Field Executive Full Name <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Rahul Sharma, Sunil Jadhav"
+              placeholder="e.g. Rahul Sharma, Ganesh Kumbhar"
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900 placeholder-stone-400 text-sm font-semibold focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
             />
           </div>
@@ -127,15 +127,15 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setRole('Field Worker')}
+                onClick={() => setRole('Field Executive')}
                 className={`py-2 px-3 rounded-xl border-2 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all ${
-                  role === 'Field Worker'
+                  role !== 'Manager'
                     ? 'border-amber-600 bg-amber-50 text-amber-950 shadow-xs'
                     : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                 }`}
               >
                 <HardHat className="w-3.5 h-3.5 text-amber-600" />
-                <span>Field Worker</span>
+                <span>Field Executive</span>
               </button>
 
               <button
@@ -167,7 +167,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose,
               className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold text-xs shadow-md transition-all flex items-center space-x-1.5"
             >
               <UserPlus className="w-4 h-4" />
-              <span>{submitting ? 'Adding...' : 'Add Worker to Team'}</span>
+              <span>{submitting ? 'Adding...' : 'Add Field Executive'}</span>
             </button>
           </div>
         </form>

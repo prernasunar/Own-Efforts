@@ -85,10 +85,10 @@ const LOCAL_CUSTOM_WORKTYPES_KEY = 'civil_site_custom_worktypes';
 const LOCAL_USERS_DB_KEY = 'civil_site_users_db';
 
 const INITIAL_DEMO_WORKERS: UserProfile[] = [
-  { uid: 'demo_worker_1', name: 'Rajesh Kumar', email: 'rajesh.kumar@civilsite.work', role: 'Field Worker' },
-  { uid: 'demo_worker_2', name: 'Amit Sharma', email: 'amit.sharma@civilsite.work', role: 'Field Worker' },
-  { uid: 'demo_worker_3', name: 'Suresh Patel', email: 'suresh.patel@civilsite.work', role: 'Field Worker' },
-  { uid: 'demo_worker_4', name: 'Vikram Singh', email: 'vikram.singh@civilsite.work', role: 'Field Worker' },
+  { uid: 'demo_worker_1', name: 'Rajesh Kumar', email: 'rajesh.kumar@civilsite.work', role: 'Field Executive' },
+  { uid: 'demo_worker_2', name: 'Amit Sharma', email: 'amit.sharma@civilsite.work', role: 'Field Executive' },
+  { uid: 'demo_worker_3', name: 'Suresh Patel', email: 'suresh.patel@civilsite.work', role: 'Field Executive' },
+  { uid: 'demo_worker_4', name: 'Vikram Singh', email: 'vikram.singh@civilsite.work', role: 'Field Executive' },
 ];
 
 const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
@@ -626,7 +626,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       uid,
       name: trimmedName,
       email: worker.email?.trim() || `${trimmedName.toLowerCase().replace(/\s+/g, '.')}@site.work`,
-      role: worker.role || 'Field Worker',
+      role: worker.role || 'Field Executive',
       createdAt: new Date().toISOString(),
     };
 
