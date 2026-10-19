@@ -1,20 +1,55 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
-import { WorkEntry, WorkTypeItem, PRESET_WORK_TYPES, EntryStatus, UOMType, UserProfile } from '../types';
+import { WorkEntry, WorkTypeItem, PRESET_WORK_TYPES, EntryStatus, UOMType, UserProfile, UserRole } from '../types';
 import { supabaseDb, isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import { auth, db, isFirebaseConfigured, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
   collection,
   query,
-  orderBy,
   onSnapshot,
   addDoc,
   updateDoc,
   deleteDoc,
   doc,
+  getDocs,
+  setDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore';
+
+export function parseWorkEntryDate(raw: any, fallbackDateStr?: string): { toDate: () => Date; isoString: string } {
+  let d: Date | null = null;
+  if (raw) {
+    if (typeof raw.toDate === 'function') {
+      try {
+        d = raw.toDate();
+      } catch {}
+    } else if (raw instanceof Date) {
+      d = raw;
+    } else if (typeof raw === 'string' || typeof raw === 'number') {
+      const parsed = new Date(raw);
+      if (!isNaN(parsed.getTime())) d = parsed;
+    }
+  }
+
+  if (!d && fallbackDateStr) {
+    const [y, m, day] = fallbackDateStr.split('-').map(Number);
+    if (y && m && day) {
+      d = new Date(y, m - 1, day);
+    } else {
+      const parsed = new Date(fallbackDateStr);
+      if (!isNaN(parsed.getTime())) d = parsed;
+    }
+  }
+
+  if (!d || isNaN(d.getTime())) {
+    d = new Date();
+  }
+
+  return {
+    toDate: () => d!,
+    isoString: d.toISOString(),
+  };
+}
 
 interface WorkDataContextType {
   workTypes: WorkTypeItem[];
@@ -23,6 +58,7 @@ interface WorkDataContextType {
   teamWorkers: UserProfile[];
   loading: boolean;
   addWorkType: (name: string, uom: UOMType) => Promise<void>;
+  addWorker: (worker: { name: string; email?: string; role?: UserRole }) => Promise<UserProfile>;
   createEntry: (entryData: {
     workType?: string;
     uom?: UOMType;
@@ -64,9 +100,12 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     uom: 'meter',
     quantity: 145,
     status: 'Done',
+    route: 'Sector 14 Junction Route',
+    location: 'Sector 14 Junction, North Road',
     locationFrom: 'Sector 14 Junction, North Road',
     locationTo: 'Main Substation Gate #2',
     remark: 'Excavated 1.2m depth trench with safety barricades installed.',
+    date: new Date().toLocaleDateString('en-CA'),
     createdAt: { toDate: () => new Date(Date.now() - 3600000 * 2) },
   },
   {
@@ -77,9 +116,12 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     uom: 'meter',
     quantity: 90,
     status: 'Pending',
+    route: 'Station Road OFC Backbone',
+    location: 'Manhole MH-42 (Station Road)',
     locationFrom: 'Manhole MH-42 (Station Road)',
     locationTo: 'Optical Hub Node 7',
     remark: 'Waiting for HDPE coupler delivery to finish joining.',
+    date: new Date().toLocaleDateString('en-CA'),
     createdAt: { toDate: () => new Date(Date.now() - 3600000 * 4) },
   },
   {
@@ -90,9 +132,12 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     uom: 'Number',
     quantity: 2,
     status: 'Done',
+    route: 'Crossroad Sector 9 Route',
+    location: 'Crossroad Sector 9',
     locationFrom: 'Crossroad Sector 9',
     locationTo: 'Plot 104 Boundary Wall',
     remark: 'Reinforced concrete handholes placed and leveled.',
+    date: new Date().toLocaleDateString('en-CA'),
     createdAt: { toDate: () => new Date(Date.now() - 3600000 * 6) },
   },
   {
@@ -103,9 +148,12 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     uom: 'meter',
     quantity: 320,
     status: 'Done',
+    route: 'Feeder Point FP-03 Line',
+    location: 'Feeder Point FP-03',
     locationFrom: 'Feeder Point FP-03',
     locationTo: 'Distribution Box DB-12',
     remark: '48F OFC blown smoothly with air compressor.',
+    date: new Date().toLocaleDateString('en-CA'),
     createdAt: { toDate: () => new Date(Date.now() - 3600000 * 8) },
   },
   {
@@ -116,9 +164,12 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     uom: 'meter',
     quantity: 210,
     status: 'Done',
+    route: 'Node Alpha-1 Section',
+    location: 'Node Alpha-1',
     locationFrom: 'Node Alpha-1',
     locationTo: 'Node Bravo-4',
     remark: 'Manual cable pull completed through 40mm duct.',
+    date: new Date().toLocaleDateString('en-CA'),
     createdAt: { toDate: () => new Date(Date.now() - 3600000 * 12) },
   },
 ];
@@ -138,48 +189,72 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ...customWorkTypes,
   ], [customWorkTypes]);
 
-  // Aggregate all unique workers from entries and registered users
+  // Aggregate all unique workers from registered users, submitted entries, and current user
   const teamWorkers = useMemo(() => {
     const map = new Map<string, UserProfile>();
 
-    // Seed with initial demo workers
-    INITIAL_DEMO_WORKERS.forEach((w) => map.set(w.name.toLowerCase(), w));
+    // 1. Check if we have real registered users from Firestore
+    const realUsers = registeredUsers.filter((u) => !u.uid.startsWith('demo_'));
+    const hasRealUsers = realUsers.length > 0;
 
-    // Add registered users
-    registeredUsers.forEach((u) => {
-      if (u.name) map.set(u.name.toLowerCase(), u);
-    });
+    if (hasRealUsers) {
+      // Prioritize real site team workers from database (e.g. Ganesh Kumbhar, Prashant Gamre)
+      realUsers.forEach((u) => {
+        if (u.name && u.name.trim()) {
+          map.set(u.name.trim().toLowerCase(), u);
+        }
+      });
+    } else {
+      // Only seed with demo workers if database has zero real workers registered
+      INITIAL_DEMO_WORKERS.forEach((w) => map.set(w.name.trim().toLowerCase(), w));
+    }
 
-    // Add any worker who has submitted entries
+    // 2. Add any worker who has submitted entries
     entries.forEach((e) => {
-      if (e.userName && !map.has(e.userName.toLowerCase())) {
-        map.set(e.userName.toLowerCase(), {
-          uid: e.uid,
-          name: e.userName,
-          email: `${e.userName.toLowerCase().replace(/\s+/g, '.')}@site.work`,
-          role: 'Field Worker',
-        });
+      if (e.userName && e.userName.trim()) {
+        const cleanName = e.userName.trim();
+        const key = cleanName.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            uid: e.uid || 'worker_' + key,
+            name: cleanName,
+            email: `${cleanName.toLowerCase().replace(/\s+/g, '.')}@site.work`,
+            role: 'Field Worker',
+          });
+        }
       }
     });
 
-    // If current logged-in user exists, ensure they are in the list
-    if (userProfile?.name && !map.has(userProfile.name.toLowerCase())) {
-      map.set(userProfile.name.toLowerCase(), userProfile);
+    // 3. Ensure current logged-in user is in the list
+    if (userProfile?.name && userProfile.name.trim()) {
+      const cleanName = userProfile.name.trim();
+      const key = cleanName.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, userProfile);
+      }
     }
 
     return Array.from(map.values());
   }, [registeredUsers, entries, userProfile]);
 
-  // Real-time Firestore synchronization (Active only when user is authenticated with Firebase)
+  // Real-time Firestore synchronization
   useEffect(() => {
     if (!isFirebase || !db) return;
 
-    // As mandated by Firebase skill: Only attach onSnapshot listeners if user is authenticated
     if (!auth?.currentUser) {
       const localSaved = localStorage.getItem(LOCAL_ENTRIES_KEY);
       if (localSaved) {
         try {
-          setEntries(JSON.parse(localSaved));
+          const parsed = JSON.parse(localSaved);
+          setEntries(
+            parsed.map((item: any) => {
+              const dateHelper = parseWorkEntryDate(item.createdAt || item.createdAtDate, item.date);
+              return {
+                ...item,
+                createdAt: { toDate: dateHelper.toDate },
+              };
+            })
+          );
         } catch {
           setEntries(INITIAL_DEMO_ENTRIES);
         }
@@ -195,22 +270,23 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let unsubscribeUsers = () => {};
 
     try {
-      // 1. Entries Collection Listener
-      const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
+      // 1. Entries Collection Listener (Query all entries; sort in JS so missing/null createdAt is never omitted)
+      const entriesQuery = query(collection(db, 'entries'));
       unsubscribeEntries = onSnapshot(
         entriesQuery,
         (snapshot) => {
           if (!snapshot.empty) {
             const list: WorkEntry[] = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
+              const dateHelper = parseWorkEntryDate(data.createdAt || data.createdAtDate, data.date);
               return {
                 id: docSnap.id,
                 uid: data.uid || '',
                 userName: data.userName || 'Field Worker',
-                workType: data.workType || '',
+                workType: data.workType || data.route || 'Site Work',
                 uom: data.uom || 'meter',
-                quantity: Number(data.quantity) || 0,
-                status: data.status || 'Pending',
+                quantity: Number(data.quantity) || 1,
+                status: (data.status as EntryStatus) || 'Done',
                 route: data.route || '',
                 location: data.location || data.locationFrom || '',
                 latLong: data.latLong || '',
@@ -219,23 +295,40 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 remark: data.remark || '',
                 photos: data.photos || [],
                 date: data.date,
-                createdAt: data.createdAt || { toDate: () => new Date() },
+                createdAt: { toDate: dateHelper.toDate },
                 updatedAt: data.updatedAt,
               };
             });
+
+            // Sort newest first by date/createdAt
+            list.sort((a, b) => {
+              const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+              const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+              return timeB - timeA;
+            });
+
             setEntries(list);
           } else {
-            const localSaved = localStorage.getItem(LOCAL_ENTRIES_KEY);
-            setEntries(localSaved ? JSON.parse(localSaved) : INITIAL_DEMO_ENTRIES);
+            // Firestore is live and empty: no worker submissions yet
+            setEntries([]);
           }
           setLoading(false);
         },
         (error) => {
-          console.warn('Firestore entries snapshot warning, falling back to local storage:', error.message);
+          console.warn('Firestore entries snapshot notice, using local cache:', error.message);
           const saved = localStorage.getItem(LOCAL_ENTRIES_KEY);
           if (saved) {
             try {
-              setEntries(JSON.parse(saved));
+              const parsed = JSON.parse(saved);
+              setEntries(
+                parsed.map((item: any) => {
+                  const dateHelper = parseWorkEntryDate(item.createdAt || item.createdAtDate, item.date);
+                  return {
+                    ...item,
+                    createdAt: { toDate: dateHelper.toDate },
+                  };
+                })
+              );
             } catch {
               setEntries(INITIAL_DEMO_ENTRIES);
             }
@@ -265,7 +358,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setCustomWorkTypes(list);
         },
         (err) => {
-          console.warn('Firestore workTypes snapshot warning:', err.message);
+          console.warn('Firestore workTypes snapshot notice:', err.message);
         }
       );
 
@@ -289,11 +382,11 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         },
         (err) => {
-          console.warn('Firestore users snapshot warning:', err.message);
+          console.warn('Firestore users snapshot notice:', err.message);
         }
       );
     } catch (err) {
-      console.warn('Firestore setup listener caught exception:', err);
+      console.warn('Firestore setup listener exception:', err);
       setLoading(false);
     }
 
@@ -305,11 +398,73 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [isFirebase, user]);
 
   const loadData = useCallback(async () => {
-    if (isFirebase) return; // Managed by onSnapshot
-
     setLoading(true);
     try {
-      // 1. If Supabase configured, load from Supabase
+      // 1. If Firebase is active and user is signed in, force refresh Firestore collections
+      if (isFirebase && db && auth?.currentUser) {
+        try {
+          const [entriesSnap, usersSnap] = await Promise.all([
+            getDocs(collection(db, 'entries')),
+            getDocs(collection(db, 'users')),
+          ]);
+
+          if (!entriesSnap.empty) {
+            const list: WorkEntry[] = entriesSnap.docs.map((docSnap) => {
+              const data = docSnap.data();
+              const dateHelper = parseWorkEntryDate(data.createdAt || data.createdAtDate, data.date);
+              return {
+                id: docSnap.id,
+                uid: data.uid || '',
+                userName: data.userName || 'Field Worker',
+                workType: data.workType || data.route || 'Site Work',
+                uom: data.uom || 'meter',
+                quantity: Number(data.quantity) || 1,
+                status: (data.status as EntryStatus) || 'Done',
+                route: data.route || '',
+                location: data.location || data.locationFrom || '',
+                latLong: data.latLong || '',
+                locationFrom: data.locationFrom || data.location || '',
+                locationTo: data.locationTo || '',
+                remark: data.remark || '',
+                photos: data.photos || [],
+                date: data.date,
+                createdAt: { toDate: dateHelper.toDate },
+                updatedAt: data.updatedAt,
+              };
+            });
+
+            list.sort((a, b) => {
+              const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+              const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+              return timeB - timeA;
+            });
+
+            setEntries(list);
+          } else {
+            setEntries([]);
+          }
+
+          if (!usersSnap.empty) {
+            const userList: UserProfile[] = usersSnap.docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                uid: docSnap.id,
+                name: data.name || 'User',
+                email: data.email || '',
+                role: data.role || 'Field Worker',
+                createdAt: data.createdAt,
+              };
+            });
+            setRegisteredUsers(userList);
+          }
+          setLoading(false);
+          return;
+        } catch (fbErr) {
+          console.warn('Manual Firestore fetch fallback to local storage:', fbErr);
+        }
+      }
+
+      // 2. If Supabase configured, load from Supabase
       if (isSupabase) {
         const [sbEntries, sbWorkTypes] = await Promise.all([
           supabaseDb.getWorkEntries(),
@@ -319,7 +474,21 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setEntries(sbEntries);
         } else {
           const localSaved = localStorage.getItem(LOCAL_ENTRIES_KEY);
-          setEntries(localSaved ? JSON.parse(localSaved) : INITIAL_DEMO_ENTRIES);
+          if (localSaved) {
+            try {
+              const parsed = JSON.parse(localSaved);
+              setEntries(
+                parsed.map((item: any) => {
+                  const dateHelper = parseWorkEntryDate(item.createdAt || item.createdAtDate, item.date);
+                  return { ...item, createdAt: { toDate: dateHelper.toDate } };
+                })
+              );
+            } catch {
+              setEntries(INITIAL_DEMO_ENTRIES);
+            }
+          } else {
+            setEntries(INITIAL_DEMO_ENTRIES);
+          }
         }
         if (sbWorkTypes.length > 0) {
           setCustomWorkTypes(sbWorkTypes);
@@ -328,16 +497,19 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return;
       }
 
-      // 2. Local Storage
+      // 3. Local Storage Fallback
       const savedEntries = localStorage.getItem(LOCAL_ENTRIES_KEY);
       if (savedEntries) {
         try {
           const parsed = JSON.parse(savedEntries);
           setEntries(
-            parsed.map((item: any) => ({
-              ...item,
-              createdAt: { toDate: () => new Date(item.createdAtDate || Date.now()) },
-            }))
+            parsed.map((item: any) => {
+              const dateHelper = parseWorkEntryDate(item.createdAt || item.createdAtDate, item.date);
+              return {
+                ...item,
+                createdAt: { toDate: dateHelper.toDate },
+              };
+            })
           );
         } catch {
           setEntries(INITIAL_DEMO_ENTRIES);
@@ -445,6 +617,53 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem(LOCAL_CUSTOM_WORKTYPES_KEY, JSON.stringify(updated));
   };
 
+  const addWorker = async (worker: { name: string; email?: string; role?: UserRole }): Promise<UserProfile> => {
+    const trimmedName = worker.name.trim();
+    if (!trimmedName) throw new Error('Worker name cannot be empty');
+
+    const uid = 'worker_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const newWorker: UserProfile = {
+      uid,
+      name: trimmedName,
+      email: worker.email?.trim() || `${trimmedName.toLowerCase().replace(/\s+/g, '.')}@site.work`,
+      role: worker.role || 'Field Worker',
+      createdAt: new Date().toISOString(),
+    };
+
+    // 1. If Firebase is active and user is signed in
+    if (isFirebase && db && auth?.currentUser) {
+      try {
+        await setDoc(doc(db, 'users', uid), {
+          name: newWorker.name,
+          email: newWorker.email,
+          role: newWorker.role,
+          createdAt: serverTimestamp(),
+        });
+      } catch (err) {
+        console.warn('Could not save worker to Firestore users collection:', err);
+      }
+    }
+
+    // 2. Supabase
+    if (isSupabase) {
+      await supabaseDb.upsertProfile(newWorker).catch(() => {});
+    }
+
+    // 3. Local database
+    try {
+      const localUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
+      localUsers[uid] = newWorker;
+      localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(localUsers));
+    } catch {}
+
+    setRegisteredUsers((prev) => {
+      const exists = prev.some((w) => w.name.toLowerCase() === trimmedName.toLowerCase());
+      return exists ? prev : [newWorker, ...prev];
+    });
+
+    return newWorker;
+  };
+
   const createEntry = async (entryData: {
     workType?: string;
     uom?: UOMType;
@@ -461,14 +680,19 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }): Promise<string> => {
     const hasAuth = Boolean(isFirebase && db && auth?.currentUser);
     const uid = hasAuth && auth?.currentUser ? auth.currentUser.uid : (userProfile?.uid || 'user_worker');
-    const userName = (hasAuth && auth?.currentUser?.displayName)
-      ? auth.currentUser.displayName
-      : (userProfile?.name || 'Field Worker');
+
+    // Prefer explicit logged-in profile name
+    const resolvedName = (userProfile?.name && userProfile.name.trim() !== 'Field Worker' && userProfile.name.trim() !== '')
+      ? userProfile.name.trim()
+      : ((auth?.currentUser?.displayName && auth.currentUser.displayName.trim() !== '')
+        ? auth.currentUser.displayName.trim()
+        : (userProfile?.name?.trim() || 'Field Worker'));
+
     const todayDate = new Date().toLocaleDateString('en-CA');
 
     const payload = {
       uid,
-      userName,
+      userName: resolvedName,
       workType: entryData.workType || entryData.route || 'Site Work',
       uom: entryData.uom || 'meter',
       quantity: entryData.quantity !== undefined ? Number(entryData.quantity) : 1,
@@ -606,7 +830,17 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   };
 
-  const myEntries = entries.filter((e) => e.uid === userProfile?.uid);
+  // Matches worker by UID or Name so logs are never hidden from field worker
+  const myEntries = useMemo(() => {
+    const currentUid = userProfile?.uid || auth?.currentUser?.uid;
+    const currentName = userProfile?.name?.trim().toLowerCase() || auth?.currentUser?.displayName?.trim().toLowerCase();
+
+    return entries.filter((e) => {
+      if (currentUid && e.uid === currentUid) return true;
+      if (currentName && e.userName && e.userName.trim().toLowerCase() === currentName) return true;
+      return false;
+    });
+  }, [entries, userProfile, auth?.currentUser]);
 
   return (
     <WorkDataContext.Provider
@@ -617,6 +851,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         teamWorkers,
         loading,
         addWorkType,
+        addWorker,
         createEntry,
         updateEntry,
         deleteEntry,
@@ -633,4 +868,3 @@ export const useWorkData = () => {
   if (!context) throw new Error('useWorkData must be used within a WorkDataProvider');
   return context;
 };
-

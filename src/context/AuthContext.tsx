@@ -6,6 +6,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signInAnonymously,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
@@ -244,33 +246,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // If Firebase is active, try anonymous sign in to back the session
+      // If Firebase is active, sign in with real Firebase Auth Email/Password
       if (isFirebase && auth) {
         try {
-          const cred = await signInAnonymously(auth);
-          const fbUser = cred.user;
+          let fbUser: any = null;
+          try {
+            const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+            fbUser = cred.user;
+          } catch (signInErr: any) {
+            if (
+              (signInErr.code === 'auth/invalid-credential' ||
+                signInErr.code === 'auth/user-not-found' ||
+                signInErr.code === 'auth/wrong-password') &&
+              autoRegister
+            ) {
+              const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+              fbUser = cred.user;
+            } else {
+              throw signInErr;
+            }
+          }
+
+          const isManagerEmail = cleanEmail.toLowerCase() === 'prernasunar@gmail.com' || defaultRole === 'Manager';
           const profile: UserProfile = {
             uid: fbUser.uid,
-            name: cleanEmail.split('@')[0],
+            name: fbUser.displayName || cleanEmail.split('@')[0],
             email: cleanEmail,
-            role: defaultRole,
+            role: isManagerEmail ? 'Manager' : defaultRole,
           };
           if (db) {
             try {
-              await setDoc(doc(db, 'users', fbUser.uid), {
-                name: profile.name,
-                role: profile.role,
-                email: profile.email,
-                createdAt: serverTimestamp(),
-              });
-            } catch {}
+              await setDoc(
+                doc(db, 'users', fbUser.uid),
+                {
+                  name: profile.name,
+                  role: profile.role,
+                  email: profile.email,
+                  createdAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            } catch (writeErr) {
+              console.warn('Could not save user profile to Firestore:', writeErr);
+            }
           }
           setUser(fbUser);
           setUserProfile(profile);
           localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
           return;
-        } catch (anonErr) {
-          console.warn('Firebase anonymous login attempt notice:', anonErr);
+        } catch (fbAuthErr: any) {
+          console.warn('Firebase email sign-in fallback to local:', fbAuthErr);
         }
       }
 
@@ -328,25 +353,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (isFirebase && auth) {
         try {
-          const cred = await signInAnonymously(auth);
-          const fbUser = cred.user;
+          let fbUser: any = null;
+          try {
+            const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+            fbUser = cred.user;
+          } catch (signUpErr: any) {
+            if (signUpErr.code === 'auth/email-already-in-use') {
+              const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+              fbUser = cred.user;
+            } else {
+              throw signUpErr;
+            }
+          }
+
           const profile: UserProfile = { uid: fbUser.uid, name: cleanName, email: cleanEmail, role };
           if (db) {
             try {
-              await setDoc(doc(db, 'users', fbUser.uid), {
-                name: cleanName,
-                role,
-                email: cleanEmail,
-                createdAt: serverTimestamp(),
-              });
-            } catch {}
+              await setDoc(
+                doc(db, 'users', fbUser.uid),
+                {
+                  name: cleanName,
+                  role,
+                  email: cleanEmail,
+                  createdAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            } catch (writeErr) {
+              console.warn('Could not save user profile to Firestore:', writeErr);
+            }
           }
           setUser(fbUser);
           setUserProfile(profile);
           localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
           return;
         } catch (anonErr) {
-          console.warn('Firebase anonymous signup fallback:', anonErr);
+          console.warn('Firebase signup fallback to local:', anonErr);
         }
       }
 
@@ -428,28 +470,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const instantLogin = async (role: UserRole, customName?: string) => {
-    // 1. Try Firebase anonymous authentication so Firestore operations have a valid auth session
+    // 1. Connect with dedicated real Firebase account so Firestore has a valid auth session
     if (isFirebase && auth) {
       try {
-        const cred = await signInAnonymously(auth);
-        const fbUser = cred.user;
+        const demoEmail = role === 'Manager' ? 'manager@civilsite.com' : 'worker@civilsite.com';
+        const demoPass = role === 'Manager' ? 'Manager123456!' : 'Worker123456!';
+        let fbUser: any = null;
+
+        try {
+          const cred = await signInWithEmailAndPassword(auth, demoEmail, demoPass);
+          fbUser = cred.user;
+        } catch (signInErr: any) {
+          if (signInErr.code === 'auth/invalid-credential' || signInErr.code === 'auth/user-not-found') {
+            const cred = await createUserWithEmailAndPassword(auth, demoEmail, demoPass);
+            fbUser = cred.user;
+          } else {
+            throw signInErr;
+          }
+        }
+
         const profile: UserProfile = {
           uid: fbUser.uid,
           name: customName || (role === 'Manager' ? 'Site Manager' : 'Field Supervisor'),
-          email: `${role.toLowerCase().replace(' ', '.')}@site.work`,
+          email: demoEmail,
           role,
         };
 
         if (db) {
           try {
-            await setDoc(doc(db, 'users', fbUser.uid), {
-              name: profile.name,
-              role: profile.role,
-              email: profile.email,
-              createdAt: serverTimestamp(),
-            });
+            await setDoc(
+              doc(db, 'users', fbUser.uid),
+              {
+                name: profile.name,
+                role: profile.role,
+                email: profile.email,
+                createdAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
           } catch (e) {
-            console.warn('Could not store anonymous user in Firestore:', e);
+            console.warn('Could not store instant user profile in Firestore:', e);
           }
         }
 
@@ -457,8 +517,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserProfile(profile);
         localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
         return;
-      } catch (anonErr: any) {
-        console.warn('Firebase anonymous sign in notice (falling back to local demo session):', anonErr.message);
+      } catch (authErr: any) {
+        console.warn('Firebase instant sign in notice (falling back to local demo session):', authErr.message);
       }
     }
 

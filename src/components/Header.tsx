@@ -7,11 +7,21 @@ import { UserRole } from '../types';
 export const Header: React.FC = () => {
   const { userProfile, signOut, updateUserRole } = useAuth();
   const { refreshData } = useWorkData();
+  const [syncing, setSyncing] = React.useState(false);
 
   const handleToggleRole = () => {
     if (!userProfile) return;
     const nextRole: UserRole = userProfile.role === 'Field Worker' ? 'Manager' : 'Field Worker';
     updateUserRole(nextRole);
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await refreshData();
+    } finally {
+      setTimeout(() => setSyncing(false), 600);
+    }
   };
 
   return (
@@ -81,11 +91,12 @@ export const Header: React.FC = () => {
               </span>
             </div>
             <button
-              onClick={() => refreshData()}
+              onClick={handleSync}
+              disabled={syncing}
               className="flex items-center space-x-1 text-[11px] font-bold opacity-90 hover:opacity-100 transition-opacity flex-shrink-0 bg-amber-800/40 hover:bg-amber-800/70 px-2 py-0.5 rounded border border-amber-400/25 cursor-pointer"
             >
-              <RefreshCw className="w-3 h-3" />
-              <span>Sync</span>
+              <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin text-amber-200' : ''}`} />
+              <span>{syncing ? 'Syncing...' : 'Sync'}</span>
             </button>
           </div>
         </div>

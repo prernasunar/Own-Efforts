@@ -20,50 +20,127 @@ import {
   Camera,
   FileSpreadsheet,
   Download,
+  UserPlus,
+  RefreshCw,
 } from 'lucide-react';
 import { formatSingleEntryText, formatTeamReportText } from '../utils/share';
 import { ShareModal } from './ShareModal';
 import { PhotoLightbox } from './PhotoLightbox';
 import { ExcelExportModal } from './ExcelExportModal';
+import { AddWorkerModal } from './AddWorkerModal';
 import { exportCivilWorkToExcel } from '../utils/excelExporter';
+
+/**
+ * Checks if a work entry was logged today (checking both date string YYYY-MM-DD and createdAt timestamp)
+ */
+function isEntryToday(entry: WorkEntry): boolean {
+  const todayIso = new Date().toLocaleDateString('en-CA'); // e.g. "2026-10-18"
+  const todayStr = new Date().toDateString();
+
+  // 1. Check entry.date
+  if (entry.date) {
+    if (entry.date === todayIso) return true;
+    const [y, m, d] = entry.date.split('-').map(Number);
+    if (y && m && d) {
+      const entryD = new Date(y, m - 1, d);
+      if (entryD.toDateString() === todayStr) return true;
+    }
+  }
+
+  // 2. Check entry.createdAt
+  if (entry.createdAt) {
+    let d: Date | null = null;
+    if (typeof entry.createdAt.toDate === 'function') {
+      try {
+        d = entry.createdAt.toDate();
+      } catch {}
+    } else if (entry.createdAt instanceof Date) {
+      d = entry.createdAt;
+    } else if (typeof entry.createdAt === 'string') {
+      const parsed = new Date(entry.createdAt);
+      if (!isNaN(parsed.getTime())) d = parsed;
+    }
+
+    if (d && d.toDateString() === todayStr) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks if a work entry matches a specific custom date (YYYY-MM-DD)
+ */
+function isEntryOnDate(entry: WorkEntry, dateStr: string): boolean {
+  if (!dateStr) return true;
+  if (entry.date && entry.date === dateStr) return true;
+
+  if (entry.createdAt) {
+    let d: Date | null = null;
+    if (typeof entry.createdAt.toDate === 'function') {
+      try {
+        d = entry.createdAt.toDate();
+      } catch {}
+    } else if (entry.createdAt instanceof Date) {
+      d = entry.createdAt;
+    } else if (typeof entry.createdAt === 'string') {
+      const parsed = new Date(entry.createdAt);
+      if (!isNaN(parsed.getTime())) d = parsed;
+    }
+
+    if (d) {
+      const target = new Date(dateStr);
+      return (
+        d.getFullYear() === target.getFullYear() &&
+        d.getMonth() === target.getMonth() &&
+        d.getDate() === target.getDate()
+      );
+    }
+  }
+
+  return false;
+}
 
 export const ManagerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
-  const { entries, teamWorkers, loading } = useWorkData();
+  const { entries, teamWorkers, loading, addWorker, refreshData } = useWorkData();
 
   // Active view tab: 'logs' or 'workers'
   const [activeTab, setActiveTab] = useState<'logs' | 'workers'>('logs');
 
-  // Filter States
+  // Filter States - Default to 'ALL' dates so all worker submissions are visible immediately!
   const [selectedWorker, setSelectedWorker] = useState<string>('ALL');
-  const [selectedDate, setSelectedDate] = useState<string>('TODAY'); // 'TODAY', 'ALL', 'CUSTOM'
+  const [selectedDate, setSelectedDate] = useState<string>('ALL'); // 'ALL', 'TODAY', 'CUSTOM'
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL', 'Pending', 'Done'
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Share, Excel & Lightbox Modal State
+  // Modals State
   const [shareData, setShareData] = useState<{ title: string; text: string; photos?: string[] } | null>(null);
   const [lightboxData, setLightboxData] = useState<{ photos: string[]; index: number; title: string } | null>(null);
   const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
+  const [showAddWorkerModal, setShowAddWorkerModal] = useState<boolean>(false);
   const [quickExporting, setQuickExporting] = useState<boolean>(false);
+  const [syncing, setSyncing] = useState<boolean>(false);
 
   // Extract unique worker names combining registered team members & submitted entries
   const uniqueWorkerNames = useMemo(() => {
     const names = new Set<string>();
     teamWorkers.forEach((w) => {
-      if (w.name) names.add(w.name);
+      if (w.name && w.name.trim()) names.add(w.name.trim());
     });
     entries.forEach((e) => {
-      if (e.userName) names.add(e.userName);
+      if (e.userName && e.userName.trim()) names.add(e.userName.trim());
     });
     return Array.from(names).sort();
   }, [teamWorkers, entries]);
 
   // Comprehensive Worker Statistics for Manager Roster
   const workerStats = useMemo(() => {
-    const todayStr = new Date().toDateString();
     return uniqueWorkerNames.map((workerName) => {
-      const workerEntries = entries.filter((e) => e.userName.toLowerCase() === workerName.toLowerCase());
+      const cleanName = workerName.trim().toLowerCase();
+      const workerEntries = entries.filter(
+        (e) => (e.userName || '').trim().toLowerCase() === cleanName
+      );
       const totalEntries = workerEntries.length;
       const doneEntries = workerEntries.filter((e) => e.status === 'Done').length;
       const pendingEntries = workerEntries.filter((e) => e.status === 'Pending').length;
@@ -76,13 +153,10 @@ export const ManagerDashboard: React.FC = () => {
         .filter((e) => e.uom === 'Number')
         .reduce((sum, e) => sum + (Number(e.quantity) || 0), 0);
 
-      const todayEntries = workerEntries.filter((e) => {
-        if (!e.createdAt?.toDate) return false;
-        return e.createdAt.toDate().toDateString() === todayStr;
-      });
+      const todayEntries = workerEntries.filter(isEntryToday);
 
       const registeredProfile = teamWorkers.find(
-        (tw) => tw.name.toLowerCase() === workerName.toLowerCase()
+        (tw) => (tw.name || '').trim().toLowerCase() === cleanName
       );
 
       const activeToday = todayEntries.length > 0;
@@ -90,7 +164,7 @@ export const ManagerDashboard: React.FC = () => {
 
       return {
         name: workerName,
-        email: registeredProfile?.email || `${workerName.toLowerCase().replace(/\s+/g, '.')}@site.work`,
+        email: registeredProfile?.email || `${cleanName.replace(/\s+/g, '.')}@site.work`,
         role: registeredProfile?.role || 'Field Worker',
         totalEntries,
         doneEntries,
@@ -99,7 +173,9 @@ export const ManagerDashboard: React.FC = () => {
         totalNos,
         activeToday,
         todayCount: todayEntries.length,
-        latestEntryDate: latestEntry?.createdAt?.toDate ? latestEntry.createdAt.toDate() : null,
+        latestEntryDate: latestEntry?.createdAt?.toDate
+          ? latestEntry.createdAt.toDate()
+          : null,
       };
     }).sort((a, b) => {
       if (a.activeToday && !b.activeToday) return -1;
@@ -110,18 +186,15 @@ export const ManagerDashboard: React.FC = () => {
 
   // Today's summary metrics
   const todayMetrics = useMemo(() => {
-    const todayStr = new Date().toDateString();
-    const todayEntries = entries.filter((e) => {
-      if (!e.createdAt?.toDate) return false;
-      return e.createdAt.toDate().toDateString() === todayStr;
-    });
-
+    const todayEntries = entries.filter(isEntryToday);
     const totalToday = todayEntries.length;
     const pendingToday = todayEntries.filter((e) => e.status === 'Pending').length;
     const doneToday = todayEntries.filter((e) => e.status === 'Done').length;
 
     // Active workers today
-    const workersToday = new Set(todayEntries.map((e) => e.userName)).size;
+    const workersToday = new Set(
+      todayEntries.map((e) => (e.userName || '').trim().toLowerCase()).filter(Boolean)
+    ).size;
 
     return { totalToday, pendingToday, doneToday, workersToday };
   }, [entries]);
@@ -129,9 +202,14 @@ export const ManagerDashboard: React.FC = () => {
   // Filtered entries calculation
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
-      // 1. Worker filter
-      if (selectedWorker !== 'ALL' && entry.userName !== selectedWorker) {
-        return false;
+      // 1. Worker filter (case-insensitive & whitespace trimmed)
+      if (selectedWorker !== 'ALL') {
+        const cleanTarget = selectedWorker.trim().toLowerCase();
+        const workerName = (entry.userName || '').trim().toLowerCase();
+        const workerUid = entry.uid || '';
+        if (workerName !== cleanTarget && workerUid !== selectedWorker) {
+          return false;
+        }
       }
 
       // 2. Status filter
@@ -140,33 +218,25 @@ export const ManagerDashboard: React.FC = () => {
       }
 
       // 3. Date filter
-      if (entry.createdAt?.toDate) {
-        const entryDate = entry.createdAt.toDate();
-        if (selectedDate === 'TODAY') {
-          if (entryDate.toDateString() !== new Date().toDateString()) {
-            return false;
-          }
-        } else if (selectedDate === 'CUSTOM' && customDate) {
-          const custom = new Date(customDate);
-          if (
-            entryDate.getFullYear() !== custom.getFullYear() ||
-            entryDate.getMonth() !== custom.getMonth() ||
-            entryDate.getDate() !== custom.getDate()
-          ) {
-            return false;
-          }
-        }
+      if (selectedDate === 'TODAY') {
+        if (!isEntryToday(entry)) return false;
+      } else if (selectedDate === 'CUSTOM' && customDate) {
+        if (!isEntryOnDate(entry, customDate)) return false;
       }
 
-      // 4. Search query (workType, remark, location, workerName)
+      // 4. Search query (workType, route, location, remark, workerName)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesType = entry.workType.toLowerCase().includes(q);
-        const matchesWorker = entry.userName.toLowerCase().includes(q);
+        const matchesType = (entry.workType || '').toLowerCase().includes(q);
+        const matchesRoute = (entry.route || '').toLowerCase().includes(q);
+        const matchesWorker = (entry.userName || '').toLowerCase().includes(q);
         const matchesLoc =
-          entry.locationFrom.toLowerCase().includes(q) || entry.locationTo.toLowerCase().includes(q);
+          (entry.location || '').toLowerCase().includes(q) ||
+          (entry.locationFrom || '').toLowerCase().includes(q) ||
+          (entry.locationTo || '').toLowerCase().includes(q);
         const matchesRemark = (entry.remark || '').toLowerCase().includes(q);
-        if (!matchesType && !matchesWorker && !matchesLoc && !matchesRemark) {
+
+        if (!matchesType && !matchesRoute && !matchesWorker && !matchesLoc && !matchesRemark) {
           return false;
         }
       }
@@ -177,7 +247,7 @@ export const ManagerDashboard: React.FC = () => {
 
   // Handle Share All Filtered
   const handleShareAllFiltered = () => {
-    let filterDescription = [];
+    const filterDescription = [];
     if (selectedWorker !== 'ALL') filterDescription.push(`Worker: ${selectedWorker}`);
     if (selectedDate === 'TODAY') filterDescription.push('Today');
     else if (selectedDate === 'CUSTOM') filterDescription.push(`Date: ${customDate}`);
@@ -189,7 +259,6 @@ export const ManagerDashboard: React.FC = () => {
       filterDescription.length > 0 ? filterDescription.join(', ') : 'All Logs'
     );
 
-    // Collect all photos from filtered entries
     const allFilteredPhotos = filteredEntries.flatMap((e) => e.photos || []);
 
     setShareData({
@@ -202,14 +271,16 @@ export const ManagerDashboard: React.FC = () => {
   const handleShareSingle = (entry: WorkEntry) => {
     const text = formatSingleEntryText(entry);
     setShareData({
-      title: `Share Log: ${entry.workType} (${entry.userName})`,
+      title: `Share Log: ${entry.route || entry.workType} (${entry.userName})`,
       text,
       photos: entry.photos || [],
     });
   };
 
   const handleShareWorkerSummary = (workerName: string) => {
-    const workerLogs = entries.filter((e) => e.userName.toLowerCase() === workerName.toLowerCase());
+    const workerLogs = entries.filter(
+      (e) => (e.userName || '').trim().toLowerCase() === workerName.trim().toLowerCase()
+    );
     const text = formatTeamReportText(workerLogs, `Worker Summary: ${workerName}`);
     const photos = workerLogs.flatMap((e) => e.photos || []);
     setShareData({
@@ -245,7 +316,17 @@ export const ManagerDashboard: React.FC = () => {
 
   const selectWorkerAndFilterLogs = (workerName: string) => {
     setSelectedWorker(workerName);
+    setSelectedDate('ALL'); // Reset date filter so all logs of this worker appear immediately!
     setActiveTab('logs');
+  };
+
+  const handleManualSync = async () => {
+    setSyncing(true);
+    try {
+      await refreshData();
+    } finally {
+      setTimeout(() => setSyncing(false), 500);
+    }
   };
 
   return (
@@ -254,23 +335,38 @@ export const ManagerDashboard: React.FC = () => {
       <div className="bg-gradient-to-r from-stone-900 to-stone-800 rounded-2xl p-5 sm:p-6 text-white shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/30 text-amber-300 text-[11px] font-black uppercase tracking-wider mb-1.5 border border-amber-400/30">
-              👔 Field Manager Overview
-            </span>
+            <div className="flex items-center space-x-2 mb-1.5 flex-wrap">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/30 text-amber-300 text-[11px] font-black uppercase tracking-wider border border-amber-400/30">
+                👔 Field Manager Overview
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
+                {uniqueWorkerNames.length} Team Workers Active
+              </span>
+            </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               Team Operations Dashboard
             </h2>
             <p className="text-xs text-stone-300 mt-0.5">
-              Live monitoring of all field worker submissions with date-wise & user-wise Excel export
+              Live monitoring of all field worker submissions with date-wise & user-wise tracking and Excel exports
             </p>
           </div>
 
-          {/* Header Action Buttons (Excel Export & Share All) */}
-          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* Header Action Buttons (Add Worker, Excel Export, Share All, Manual Sync) */}
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {/* Add Field Worker Button */}
+            <button
+              onClick={() => setShowAddWorkerModal(true)}
+              className="flex items-center justify-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-stone-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+              title="Add a new field worker to the site team"
+            >
+              <UserPlus className="w-4 h-4 text-stone-950" />
+              <span>+ Add Field Worker</span>
+            </button>
+
             {/* Advanced Excel Export Button */}
             <button
               onClick={() => setShowExcelModal(true)}
-              className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white font-black text-sm shadow-md transition-all border border-emerald-400/40"
+              className="flex items-center justify-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition-all border border-emerald-400/40 cursor-pointer"
               title="Customized Excel export with Date-Wise and User-Wise filters and multi-sheet summaries"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
@@ -280,10 +376,21 @@ export const ManagerDashboard: React.FC = () => {
             {/* Share All Button */}
             <button
               onClick={handleShareAllFiltered}
-              className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-black text-sm shadow-md transition-all"
+              className="flex items-center justify-center space-x-1.5 px-3 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-600 active:bg-stone-800 text-white font-bold text-xs sm:text-sm shadow-md transition-all border border-stone-600 cursor-pointer"
+              title="Share filtered logs to WhatsApp or clipboard"
             >
-              <Share2 className="w-4 h-4" />
-              <span>Share (Filtered)</span>
+              <Share2 className="w-4 h-4 text-amber-300" />
+              <span>Share</span>
+            </button>
+
+            {/* Sync Button */}
+            <button
+              onClick={handleManualSync}
+              disabled={syncing}
+              className="p-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border border-stone-700 transition-all cursor-pointer"
+              title="Sync latest logs from database"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-amber-400' : ''}`} />
             </button>
           </div>
         </div>
@@ -291,18 +398,32 @@ export const ManagerDashboard: React.FC = () => {
         {/* TOP SUMMARY BAR (Total Entries Today, Pending vs Done, Active Workers) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-stone-700/80">
           {/* Total Today */}
-          <div className="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700 flex flex-col">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDate('TODAY');
+              setActiveTab('logs');
+            }}
+            className="bg-stone-800/80 hover:bg-stone-700/80 p-3.5 rounded-xl border border-stone-700 flex flex-col text-left transition-colors cursor-pointer"
+          >
             <span className="text-xs font-bold text-stone-400 uppercase tracking-wide">
               Total Today
             </span>
             <span className="text-2xl font-black text-white mt-1">
               {todayMetrics.totalToday}
             </span>
-            <span className="text-[10px] text-stone-400 mt-0.5">Civil work logs</span>
-          </div>
+            <span className="text-[10px] text-stone-400 mt-0.5">Click to view today's logs</span>
+          </button>
 
           {/* Pending Today */}
-          <div className="bg-orange-950/40 p-3.5 rounded-xl border border-orange-800/50 flex flex-col">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedStatus('Pending');
+              setActiveTab('logs');
+            }}
+            className="bg-orange-950/40 hover:bg-orange-900/40 p-3.5 rounded-xl border border-orange-800/50 flex flex-col text-left transition-colors cursor-pointer"
+          >
             <span className="text-xs font-bold text-orange-400 uppercase tracking-wide flex items-center space-x-1">
               <Clock className="w-3.5 h-3.5" />
               <span>Pending</span>
@@ -311,10 +432,17 @@ export const ManagerDashboard: React.FC = () => {
               {todayMetrics.pendingToday}
             </span>
             <span className="text-[10px] text-orange-400/80 mt-0.5">Requires completion</span>
-          </div>
+          </button>
 
           {/* Done Today */}
-          <div className="bg-emerald-950/40 p-3.5 rounded-xl border border-emerald-800/50 flex flex-col">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedStatus('Done');
+              setActiveTab('logs');
+            }}
+            className="bg-emerald-950/40 hover:bg-emerald-900/40 p-3.5 rounded-xl border border-emerald-800/50 flex flex-col text-left transition-colors cursor-pointer"
+          >
             <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide flex items-center space-x-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Done</span>
@@ -323,19 +451,97 @@ export const ManagerDashboard: React.FC = () => {
               {todayMetrics.doneToday}
             </span>
             <span className="text-[10px] text-emerald-400/80 mt-0.5">Verified complete</span>
-          </div>
+          </button>
 
           {/* Active Workers */}
-          <div className="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700 flex flex-col">
+          <button
+            type="button"
+            onClick={() => setActiveTab('workers')}
+            className="bg-stone-800/80 hover:bg-stone-700/80 p-3.5 rounded-xl border border-stone-700 flex flex-col text-left transition-colors cursor-pointer"
+          >
             <span className="text-xs font-bold text-stone-400 uppercase tracking-wide flex items-center space-x-1">
               <Users className="w-3.5 h-3.5" />
-              <span>Workers</span>
+              <span>Team Workers</span>
             </span>
             <span className="text-2xl font-black text-amber-400 mt-1">
-              {todayMetrics.workersToday}
+              {uniqueWorkerNames.length}
             </span>
-            <span className="text-[10px] text-stone-400 mt-0.5">Active on sites today</span>
+            <span className="text-[10px] text-stone-400 mt-0.5">
+              {todayMetrics.workersToday} active today • Click for directory
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* REGISTERED SITE FIELD WORKERS SECTION (Always visible on Manager Dashboard) */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-sm space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center space-x-2">
+            <Users className="w-5 h-5 text-amber-600" />
+            <h3 className="font-black text-stone-900 text-sm sm:text-base">
+              Site Field Workers Team ({workerStats.length} Registered)
+            </h3>
           </div>
+          <span className="text-xs text-stone-500 font-medium">
+            Tap a worker below to filter logs or view status
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {workerStats.map((w) => {
+            const isSelected = selectedWorker.trim().toLowerCase() === w.name.trim().toLowerCase();
+            return (
+              <div
+                key={w.name}
+                onClick={() => selectWorkerAndFilterLogs(w.name)}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                  isSelected
+                    ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-400'
+                    : 'bg-stone-50 hover:bg-stone-100 hover:border-amber-300 border-stone-200'
+                }`}
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-950 font-black text-sm flex items-center justify-center flex-shrink-0">
+                    {w.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .substring(0, 2)
+                      .toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center space-x-1.5 flex-wrap">
+                      <h4 className="font-extrabold text-stone-900 text-sm truncate">{w.name}</h4>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 flex-shrink-0">
+                        Registered
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 truncate">{w.email}</p>
+                    <p className="text-[11px] text-stone-600 font-semibold mt-0.5">
+                      {w.totalEntries > 0
+                        ? `${w.totalEntries} site log${w.totalEntries > 1 ? 's' : ''} submitted`
+                        : 'Awaiting site work logs'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end flex-shrink-0">
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
+                      w.activeToday
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-stone-200/80 text-stone-700 border-stone-300'
+                    }`}
+                  >
+                    {w.todayCount > 0 ? `${w.todayCount} Today` : '0 Today'}
+                  </span>
+                  <span className="text-[10px] text-amber-700 font-bold mt-1">
+                    {isSelected ? '✓ Viewing' : 'View Logs →'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -344,7 +550,7 @@ export const ManagerDashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('logs')}
-          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center space-x-2 transition-all ${
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center space-x-2 transition-all cursor-pointer ${
             activeTab === 'logs'
               ? 'bg-stone-900 text-white shadow-md'
               : 'text-stone-700 hover:text-stone-900 hover:bg-stone-100/70'
@@ -357,7 +563,7 @@ export const ManagerDashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('workers')}
-          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center space-x-2 transition-all ${
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center space-x-2 transition-all cursor-pointer ${
             activeTab === 'workers'
               ? 'bg-stone-900 text-white shadow-md'
               : 'text-stone-700 hover:text-stone-900 hover:bg-stone-100/70'
@@ -373,9 +579,9 @@ export const ManagerDashboard: React.FC = () => {
         <>
           {/* Active Worker Filter Banner if filtered */}
           {selectedWorker !== 'ALL' && (
-            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-amber-950">
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-amber-950 animate-in fade-in">
               <div className="flex items-center space-x-2.5">
-                <span className="text-xl">👷</span>
+                <span className="text-2xl">👷</span>
                 <div>
                   <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">
                     Filtered by Worker:
@@ -393,14 +599,14 @@ export const ManagerDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleShareWorkerSummary(selectedWorker)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 transition-colors cursor-pointer"
                 >
                   Share Worker Summary
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedWorker('ALL')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-100 text-stone-800 border border-amber-300 transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-100 text-stone-800 border border-amber-300 transition-colors cursor-pointer"
                 >
                   View All Workers
                 </button>
@@ -419,19 +625,74 @@ export const ManagerDashboard: React.FC = () => {
               {(selectedWorker !== 'ALL' || selectedDate !== 'ALL' || selectedStatus !== 'ALL' || searchQuery) && (
                 <button
                   onClick={resetFilters}
-                  className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center space-x-1"
+                  className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center space-x-1 cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>Reset Filters</span>
+                  <span>Reset All Filters</span>
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Quick Filter Buttons: All, Today, Pending, Done */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto py-1">
+              <span className="text-xs font-bold text-stone-500 mr-1 flex-shrink-0">Quick View:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate('ALL');
+                  setSelectedStatus('ALL');
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex-shrink-0 cursor-pointer ${
+                  selectedDate === 'ALL' && selectedStatus === 'ALL'
+                    ? 'bg-stone-900 text-white shadow-xs'
+                    : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                }`}
+              >
+                📋 All Logs ({entries.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate('TODAY');
+                  setSelectedStatus('ALL');
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex-shrink-0 cursor-pointer ${
+                  selectedDate === 'TODAY'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200'
+                }`}
+              >
+                🌟 Today Only ({todayMetrics.totalToday})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedStatus(selectedStatus === 'Pending' ? 'ALL' : 'Pending')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex-shrink-0 cursor-pointer ${
+                  selectedStatus === 'Pending'
+                    ? 'bg-orange-500 text-white shadow-xs'
+                    : 'bg-orange-50 text-orange-900 hover:bg-orange-100 border border-orange-200'
+                }`}
+              >
+                ⏳ Pending ({todayMetrics.pendingToday})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedStatus(selectedStatus === 'Done' ? 'ALL' : 'Done')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex-shrink-0 cursor-pointer ${
+                  selectedStatus === 'Done'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                ✅ Done ({todayMetrics.doneToday})
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               {/* Filter by Worker */}
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1">
-                  Filter by Worker ({uniqueWorkerNames.length} Total)
+                  Filter by Worker ({uniqueWorkerNames.length} Workers)
                 </label>
                 <select
                   value={selectedWorker}
@@ -440,7 +701,9 @@ export const ManagerDashboard: React.FC = () => {
                 >
                   <option value="ALL">👥 All Field Workers ({uniqueWorkerNames.length})</option>
                   {uniqueWorkerNames.map((name) => {
-                    const count = entries.filter((e) => e.userName.toLowerCase() === name.toLowerCase()).length;
+                    const count = entries.filter(
+                      (e) => (e.userName || '').trim().toLowerCase() === name.trim().toLowerCase()
+                    ).length;
                     return (
                       <option key={name} value={name}>
                         👷 {name} ({count} logs)
@@ -461,8 +724,8 @@ export const ManagerDashboard: React.FC = () => {
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="flex-1 px-3 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm font-semibold bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   >
-                    <option value="ALL">📅 All Dates</option>
-                    <option value="TODAY">🌟 Today Only</option>
+                    <option value="ALL">📅 All Dates ({entries.length} logs)</option>
+                    <option value="TODAY">🌟 Today Only ({todayMetrics.totalToday} logs)</option>
                     <option value="CUSTOM">🗓️ Specific Date</option>
                   </select>
                   {selectedDate === 'CUSTOM' && (
@@ -485,35 +748,35 @@ export const ManagerDashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedStatus('ALL')}
-                    className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all ${
+                    className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                       selectedStatus === 'ALL'
                         ? 'bg-stone-800 text-white border-stone-800 shadow-xs'
                         : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
                     }`}
                   >
-                    All
+                    All ({entries.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedStatus('Pending')}
-                    className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all ${
+                    className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                       selectedStatus === 'Pending'
                         ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
                         : 'bg-orange-50 text-orange-900 border-orange-200 hover:bg-orange-100'
                     }`}
                   >
-                    Pending
+                    Pending ({entries.filter((e) => e.status === 'Pending').length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedStatus('Done')}
-                    className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all ${
+                    className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                       selectedStatus === 'Done'
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                         : 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
                     }`}
                   >
-                    Done
+                    Done ({entries.filter((e) => e.status === 'Done').length})
                   </button>
                 </div>
               </div>
@@ -527,7 +790,7 @@ export const ManagerDashboard: React.FC = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search work types, locations, remarks, or worker names..."
+                  placeholder="Search route, location, lat & log, worker name, or remarks..."
                   className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-stone-300 text-stone-900 placeholder-stone-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -538,7 +801,7 @@ export const ManagerDashboard: React.FC = () => {
                   type="button"
                   onClick={handleQuickExportCurrentView}
                   disabled={quickExporting || filteredEntries.length === 0}
-                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                     filteredEntries.length === 0
                       ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
                       : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 active:bg-emerald-200'
@@ -549,15 +812,15 @@ export const ManagerDashboard: React.FC = () => {
                   <span>{quickExporting ? 'Exporting...' : `Export Excel (${filteredEntries.length})`}</span>
                 </button>
 
-                {/* Advanced Excel Modal Trigger */}
+                {/* Add Worker Trigger */}
                 <button
                   type="button"
-                  onClick={() => setShowExcelModal(true)}
-                  className="flex items-center justify-center space-x-1 px-3 py-2 rounded-xl text-xs font-bold bg-stone-900 text-white hover:bg-stone-800 transition-colors shadow-xs"
-                  title="Open full Date-Wise & User-Wise Excel Export Configurator"
+                  onClick={() => setShowAddWorkerModal(true)}
+                  className="flex items-center justify-center space-x-1 px-3 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-500 transition-colors shadow-xs cursor-pointer"
+                  title="Register new field worker"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Custom Export</span>
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Add Worker</span>
                 </button>
               </div>
             </div>
@@ -567,8 +830,18 @@ export const ManagerDashboard: React.FC = () => {
           <section className="space-y-3.5">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight">
-                  All Field Entries ({filteredEntries.length})
+                <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight flex items-center space-x-2">
+                  <span>All Field Entries ({filteredEntries.length})</span>
+                  {selectedWorker !== 'ALL' && (
+                    <span className="text-xs font-normal text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                      Worker: {selectedWorker}
+                    </span>
+                  )}
+                  {selectedDate !== 'ALL' && (
+                    <span className="text-xs font-normal text-stone-600 bg-stone-200 px-2 py-0.5 rounded-full">
+                      {selectedDate === 'TODAY' ? 'Today' : customDate}
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs font-medium text-stone-500">
                   Live updates from all site workers (Manager view - Read Only)
@@ -578,26 +851,67 @@ export const ManagerDashboard: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setShowExcelModal(true)}
-                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 text-xs font-bold transition-colors shadow-xs"
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 text-xs font-bold transition-colors shadow-xs cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
                   <span>Date & User Excel</span>
                 </button>
 
-                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+                <button
+                  onClick={handleManualSync}
+                  className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 cursor-pointer"
+                  title="Refresh latest entries from database"
+                >
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Live Stream</span>
-                </span>
+                  <span>Live Stream • Refresh</span>
+                </button>
               </div>
             </div>
 
             {filteredEntries.length === 0 ? (
-              <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-stone-200">
-                <ClipboardList className="w-10 h-10 text-stone-400 mx-auto mb-2" />
-                <p className="font-bold text-stone-700 text-base">No matching work entries found</p>
-                <p className="text-xs text-stone-500 mt-1">
-                  Try adjusting your worker, date, or status filters.
+              <div className="bg-white rounded-2xl p-8 sm:p-10 text-center border-2 border-dashed border-stone-200 space-y-3">
+                <ClipboardList className="w-12 h-12 text-stone-400 mx-auto" />
+                <h4 className="font-extrabold text-stone-900 text-base sm:text-lg">
+                  {selectedWorker !== 'ALL'
+                    ? `No work logs submitted yet by ${selectedWorker}`
+                    : 'No site work logs submitted yet'}
+                </h4>
+                <p className="text-xs sm:text-sm text-stone-600 max-w-lg mx-auto leading-relaxed">
+                  {selectedWorker !== 'ALL' ? (
+                    <span>
+                      Worker <strong>{selectedWorker}</strong> is successfully registered on your site team.
+                      Once they complete work on site and tap <strong>"Submit Work Log"</strong> on their phone,
+                      their route details, measurements, and photos will instantly sync and appear right here.
+                    </span>
+                  ) : uniqueWorkerNames.length > 0 ? (
+                    <span>
+                      Your site team workers (<strong>{uniqueWorkerNames.join(', ')}</strong>) are registered and connected to the cloud site database.
+                      As soon as any field worker submits a work log today, it will appear here in real time.
+                    </span>
+                  ) : (
+                    <span>
+                      No work entries have been submitted yet. When field workers log site work, it will appear here in real time.
+                    </span>
+                  )}
                 </p>
+                <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
+                  {selectedWorker !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-colors cursor-pointer"
+                    >
+                      View All Field Logs
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowAddWorkerModal(true)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 transition-colors cursor-pointer"
+                  >
+                    + Add Field Worker
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3.5">
@@ -609,7 +923,7 @@ export const ManagerDashboard: React.FC = () => {
                         hour: '2-digit',
                         minute: '2-digit',
                       })
-                    : 'Just now';
+                    : entry.date || 'Just now';
 
                   const isDone = entry.status === 'Done';
 
@@ -634,15 +948,15 @@ export const ManagerDashboard: React.FC = () => {
                           </div>
 
                           <div>
-                            {/* Clear Worker Name */}
+                            {/* Clear Worker Name with 1-click Filter */}
                             <div className="flex items-center space-x-2 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => selectWorkerAndFilterLogs(entry.userName)}
-                                className="font-extrabold text-sm sm:text-base text-stone-900 hover:text-amber-800 transition-colors text-left"
-                                title="Filter logs to this worker"
+                                className="font-extrabold text-sm sm:text-base text-stone-900 hover:text-amber-800 transition-colors text-left cursor-pointer flex items-center space-x-1"
+                                title="Click to view all logs from this worker"
                               >
-                                {entry.userName}
+                                <span>{entry.userName}</span>
                               </button>
                               <span className="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-600 font-semibold border border-stone-200">
                                 Field Worker
@@ -758,10 +1072,10 @@ export const ManagerDashboard: React.FC = () => {
                                     setLightboxData({
                                       photos: entry.photos || [],
                                       index: pIdx,
-                                      title: `${entry.userName} • ${entry.workType} (${entry.quantity} ${entry.uom})`,
+                                      title: `${entry.userName} • ${entry.route || entry.workType}`,
                                     })
                                   }
-                                  className="relative w-14 h-14 rounded-lg overflow-hidden border border-stone-300 flex-shrink-0 hover:scale-105 transition-transform shadow-2xs group"
+                                  className="relative w-14 h-14 rounded-lg overflow-hidden border border-stone-300 flex-shrink-0 hover:scale-105 transition-transform shadow-2xs group cursor-pointer"
                                 >
                                   <img
                                     src={photo}
@@ -781,13 +1095,13 @@ export const ManagerDashboard: React.FC = () => {
                       {/* Share Individual Log */}
                       <div className="flex items-center justify-between pt-1 border-t border-stone-100">
                         <span className="text-[11px] text-stone-400 font-medium italic">
-                          Verified site log • UID: {entry.uid.substring(0, 8)}...
+                          Verified site log • UID: {entry.uid ? entry.uid.substring(0, 8) + '...' : 'System'}
                         </span>
 
                         <div className="flex items-center space-x-2">
                           <button
                             onClick={() => selectWorkerAndFilterLogs(entry.userName)}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors"
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors cursor-pointer"
                           >
                             <UserIcon className="w-3 h-3 text-stone-500" />
                             <span>Worker Logs</span>
@@ -795,7 +1109,7 @@ export const ManagerDashboard: React.FC = () => {
 
                           <button
                             onClick={() => handleShareSingle(entry)}
-                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs"
+                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs cursor-pointer"
                           >
                             <Share2 className="w-3.5 h-3.5" />
                             <span>Share</span>
@@ -814,24 +1128,34 @@ export const ManagerDashboard: React.FC = () => {
       {/* TAB 2: FIELD WORKERS DIRECTORY & PERFORMANCE ROSTER */}
       {activeTab === 'workers' && (
         <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
             <div>
               <h3 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight flex items-center space-x-2">
                 <Users className="w-5 h-5 text-amber-600" />
                 <span>Field Workers Roster ({workerStats.length} Workers)</span>
               </h3>
               <p className="text-xs font-medium text-stone-500">
-                Complete overview of all field personnel and individual work metrics
+                Complete overview of all field personnel and individual work logs
               </p>
             </div>
 
-            <button
-              onClick={() => setShowExcelModal(true)}
-              className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs transition-colors"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
-              <span>Export Team Excel</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowAddWorkerModal(true)}
+                className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-stone-950 text-xs font-black shadow-xs transition-colors cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4 text-stone-950" />
+                <span>+ Add Field Worker</span>
+              </button>
+
+              <button
+                onClick={() => setShowExcelModal(true)}
+                className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Export Team Excel</span>
+              </button>
+            </div>
           </div>
 
           {/* Workers Card Grid */}
@@ -877,7 +1201,7 @@ export const ManagerDashboard: React.FC = () => {
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-stone-100 text-stone-500 border border-stone-200">
-                          No logs today
+                          {w.totalEntries > 0 ? 'No logs today' : 'Ready to log'}
                         </span>
                       )}
                     </div>
@@ -934,7 +1258,7 @@ export const ManagerDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => selectWorkerAndFilterLogs(w.name)}
-                      className="flex-1 inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-stone-900 text-white hover:bg-stone-800 transition-colors shadow-xs"
+                      className="flex-1 inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-stone-900 text-white hover:bg-stone-800 transition-colors shadow-xs cursor-pointer"
                     >
                       <ClipboardList className="w-3.5 h-3.5" />
                       <span>View Logs ({w.totalEntries})</span>
@@ -943,7 +1267,12 @@ export const ManagerDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleShareWorkerSummary(w.name)}
-                      className="inline-flex items-center justify-center space-x-1 px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors"
+                      disabled={w.totalEntries === 0}
+                      className={`inline-flex items-center justify-center space-x-1 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                        w.totalEntries === 0
+                          ? 'bg-stone-50 text-stone-400 border-stone-200 cursor-not-allowed'
+                          : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300'
+                      }`}
                       title="Share this worker's report to WhatsApp or clipboard"
                     >
                       <Share2 className="w-3.5 h-3.5" />
@@ -987,6 +1316,15 @@ export const ManagerDashboard: React.FC = () => {
         initialWorker={selectedWorker}
         initialDateType={selectedDate === 'CUSTOM' ? 'CUSTOM_DATE' : selectedDate === 'TODAY' ? 'TODAY' : 'ALL'}
         initialCustomDate={customDate}
+      />
+
+      {/* Add Field Worker Modal */}
+      <AddWorkerModal
+        isOpen={showAddWorkerModal}
+        onClose={() => setShowAddWorkerModal(false)}
+        onAdd={async (worker) => {
+          await addWorker(worker);
+        }}
       />
     </div>
   );
