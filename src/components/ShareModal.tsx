@@ -1,19 +1,14 @@
 import React, { useState } from 'react';
 import {
   X,
-  MessageSquare,
-  Send,
   Copy,
   Check,
   Share2,
   Camera,
   Download,
-  ExternalLink,
   Smartphone,
   Eye,
-  CheckCircle2,
 } from 'lucide-react';
-import { getWhatsAppUrl, getTelegramUrl } from '../utils/share';
 import {
   downloadPhoto,
   downloadAllPhotos,
@@ -84,8 +79,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
   };
 
-  const whatsappUrl = getWhatsAppUrl(shareText);
-  const telegramUrl = getTelegramUrl(shareText);
   const hasPhotos = photos && photos.length > 0;
 
   return (
@@ -229,40 +222,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </button>
             </div>
 
-            {/* 3. Direct WhatsApp & Telegram Web / Quick Links */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
-                Direct App Links
-              </label>
-              <div className="grid grid-cols-2 gap-2.5">
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors text-center"
-                >
-                  <MessageSquare className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">WhatsApp</span>
-                </a>
-
-                <a
-                  href={telegramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors text-center"
-                >
-                  <Send className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">Telegram</span>
-                </a>
-              </div>
-            </div>
-
             {/* 4. Formatted Text Preview & Copy */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Formatted Text
-                </label>
+              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                <div className="flex items-center space-x-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-stone-500">
+                    Formatted Text
+                  </label>
+                  <span className="text-[10px] font-bold text-stone-600 bg-stone-200/80 px-2 py-0.5 rounded-full border border-stone-300">
+                    🔒 Logged Time: Not Editable
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={handleCopyText}
@@ -281,7 +251,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   )}
                 </button>
               </div>
-              <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono text-stone-800 whitespace-pre-wrap max-h-36 overflow-y-auto">
+              <div
+                aria-readonly="true"
+                className="p-3 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-mono text-stone-800 whitespace-pre-wrap max-h-36 overflow-y-auto select-none cursor-default"
+              >
                 {shareText}
               </div>
             </div>

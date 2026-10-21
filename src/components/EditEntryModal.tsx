@@ -133,30 +133,52 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Work Date Section (Editable) */}
-          <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-bold text-amber-950 flex items-center space-x-1.5">
-                <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                <span>Work Date / तारीख</span>
-                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                  Editable
-                </span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setDate(new Date().toLocaleDateString('en-CA'))}
-                className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline"
-              >
-                Set Today
-              </button>
+          {/* Work Date Section (Editable) & Logged Time (Locked / Not Editable) */}
+          <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200 space-y-2.5">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-amber-950 flex items-center space-x-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Work Date / तारीख</span>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                    Editable
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDate(new Date().toLocaleDateString('en-CA'))}
+                  className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline"
+                >
+                  Set Today
+                </button>
+              </div>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none transition-colors"
+              />
             </div>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none transition-colors"
-            />
+
+            <div className="pt-2 border-t border-amber-200/70 flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-1.5 text-stone-700 font-bold">
+                <Clock className="w-3.5 h-3.5 text-stone-500" />
+                <span>Logged Time:</span>
+                <span className="text-[10px] font-bold text-stone-600 bg-stone-200/90 px-1.5 py-0.5 rounded border border-stone-300">
+                  🔒 Not Editable
+                </span>
+              </div>
+              <span className="font-mono font-bold text-stone-800 bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-300 select-none">
+                {entry.createdAt?.toDate
+                  ? entry.createdAt.toDate().toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : 'System Recorded'}
+              </span>
+            </div>
           </div>
 
           {/* 1. Route */}

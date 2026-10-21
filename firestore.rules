@@ -36,16 +36,16 @@ service cloud.firestore {
 
     // Users Collection Rules
     function isValidUser(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.role in ['Field Worker', 'Manager'] &&
-             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.role in ['Field Worker', 'Field Executive', 'Manager'] &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
              (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string);
     }
 
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn();
-      allow create: if isSignedIn() && (request.auth.uid == userId || isManager() || incoming().role == 'Field Worker') && isValidUser(incoming());
+      allow create: if isSignedIn() && (request.auth.uid == userId || isManager() || incoming().role in ['Field Worker', 'Field Executive']) && isValidUser(incoming());
       allow update: if isSignedIn() && (request.auth.uid == userId || isManager()) && isValidUser(incoming()) &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'email']);
       allow delete: if false;
@@ -53,9 +53,9 @@ service cloud.firestore {
 
     // Work Types Collection Rules (Shared across team)
     function isValidWorkType(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
              data.uom in ['meter', 'Number'] &&
-             (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 100)) &&
+             (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 150)) &&
              (!('creatorUid' in data) || (data.creatorUid is string && data.creatorUid == request.auth.uid)) &&
              (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string);
     }
@@ -70,21 +70,22 @@ service cloud.firestore {
     // Entries Collection Rules
     function isValidWorkEntry(data) {
       return data.uid is string && data.uid == request.auth.uid &&
-             data.userName is string && data.userName.size() > 0 && data.userName.size() <= 100 &&
-             (!('workType' in data) || (data.workType is string && data.workType.size() <= 100)) &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() <= 200 &&
+             (!('workType' in data) || (data.workType is string && data.workType.size() <= 500)) &&
              (!('uom' in data) || data.uom in ['meter', 'Number']) &&
              (!('quantity' in data) || (data.quantity is number && data.quantity >= 0)) &&
              data.status in ['Pending', 'Done'] &&
-             (!('route' in data) || (data.route is string && data.route.size() <= 200)) &&
-             (!('location' in data) || (data.location is string && data.location.size() <= 300)) &&
-             (!('latLong' in data) || (data.latLong is string && data.latLong.size() <= 200)) &&
-             (!('locationFrom' in data) || (data.locationFrom is string && data.locationFrom.size() <= 300)) &&
-             (!('locationTo' in data) || (data.locationTo is string && data.locationTo.size() <= 300)) &&
-             (!('remark' in data) || (data.remark is string && data.remark.size() <= 1000)) &&
-             (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
-             (!('photos' in data) || (data.photos is list && data.photos.size() <= 4)) &&
-             (!('createdAt' in data) || data.createdAt is timestamp) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
+             (!('route' in data) || (data.route is string && data.route.size() <= 500)) &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 1000)) &&
+             (!('latLong' in data) || (data.latLong is string && data.latLong.size() <= 500)) &&
+             (!('locationFrom' in data) || (data.locationFrom is string && data.locationFrom.size() <= 1000)) &&
+             (!('locationTo' in data) || (data.locationTo is string && data.locationTo.size() <= 1000)) &&
+             (!('remark' in data) || (data.remark is string && data.remark.size() <= 5000)) &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 100)) &&
+             (!('photos' in data) || (data.photos is list && data.photos.size() <= 10)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string) &&
+             (!('createdAtDate' in data) || data.createdAtDate is string) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt is string);
     }
 
     match /entries/{entryId} {
@@ -94,13 +95,12 @@ service cloud.firestore {
       // Create: Field workers create entries with their own UID stamped
       allow create: if isSignedIn() && isValidWorkEntry(incoming());
 
-      // Update: Field workers can edit only their own entries
+      // Update: Field workers can edit their own entries, or managers can update
       allow update: if isSignedIn() &&
-                    existing().uid == request.auth.uid &&
+                    (existing().uid == request.auth.uid || isManager()) &&
                     incoming().uid == existing().uid &&
-                    incoming().userName == existing().userName &&
                     isValidWorkEntry(incoming()) &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'status', 'route', 'location', 'latLong', 'locationFrom', 'locationTo', 'remark', 'photos', 'date', 'updatedAt']);
+                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'status', 'route', 'location', 'latLong', 'locationFrom', 'locationTo', 'remark', 'photos', 'date', 'updatedAt', 'createdAtDate']);
 
       // Delete: Field workers can delete only their own entries (Managers cannot delete workers' entries)
       allow delete: if isSignedIn() && existing().uid == request.auth.uid;

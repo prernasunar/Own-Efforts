@@ -379,8 +379,12 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
     try {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
-      const targetW = video.videoWidth || 1280;
-      const targetH = video.videoHeight || 720;
+      const rawW = video.videoWidth || 1280;
+      const rawH = video.videoHeight || 720;
+      const maxDim = 960;
+      const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
+      const targetW = Math.round(rawW * scale);
+      const targetH = Math.round(rawH * scale);
 
       canvas.width = targetW;
       canvas.height = targetH;
@@ -398,8 +402,8 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
 
       await drawGpsMapCameraWatermark(ctx, targetW, targetH, lat, lng, fullAddress, cityOrArea, timeStr);
 
-      // 3. Compress to JPEG data URL
-      const photoUrl = canvas.toDataURL('image/jpeg', 0.88);
+      // 3. Compress to Firestore-safe JPEG data URL
+      const photoUrl = canvas.toDataURL('image/jpeg', 0.72);
 
       onCapture({
         photoUrl,
@@ -414,7 +418,6 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
       onClose();
     } catch (err: any) {
       console.error('Failed to capture photo:', err);
-      alert('Photo capture failed: ' + err.message);
     } finally {
       setCapturing(false);
     }
@@ -431,18 +434,22 @@ export const GpsMapCameraModal: React.FC<GpsMapCameraModalProps> = ({ isOpen, on
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        const maxDim = 960;
+        const scale = Math.min(1, maxDim / Math.max(img.width || 960, img.height || 720));
+        const targetW = Math.round(img.width * scale);
+        const targetH = Math.round(img.height * scale);
+        canvas.width = targetW;
+        canvas.height = targetH;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, targetW, targetH);
           const lat = coords?.lat ?? 19.053155;
           const lng = coords?.lng ?? 73.016608;
           const formattedCoords = `Lat ${lat.toFixed(6)}° Long ${lng.toFixed(6)}°`;
           const timeStr = currentTimeStr || formatGpsTimestamp();
 
-          await drawGpsMapCameraWatermark(ctx, img.width, img.height, lat, lng, fullAddress, cityOrArea, timeStr);
-          const photoUrl = canvas.toDataURL('image/jpeg', 0.88);
+          await drawGpsMapCameraWatermark(ctx, targetW, targetH, lat, lng, fullAddress, cityOrArea, timeStr);
+          const photoUrl = canvas.toDataURL('image/jpeg', 0.72);
 
           onCapture({
             photoUrl,

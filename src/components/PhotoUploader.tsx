@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Camera, Image as ImageIcon, X, Loader2, Eye, MapPin, Sparkles, UploadCloud } from 'lucide-react';
-import { processFileList } from '../utils/imageUtils';
+import { processFileList, ensureFirestoreSafePhotos } from '../utils/imageUtils';
 import { extractGpsFromPhoto, PhotoGpsData } from '../utils/photoGpsExtractor';
 import { GpsMapCameraModal } from './GpsMapCameraModal';
 
@@ -43,7 +43,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
       if (newImages.length > 0) {
         const startIndex = photos.length;
-        const updatedPhotos = [...photos, ...newImages].slice(0, maxPhotos);
+        const combined = [...photos, ...newImages].slice(0, maxPhotos);
+        const updatedPhotos = await ensureFirestoreSafePhotos(combined);
         onChange(updatedPhotos);
 
         // Run GPS detection on each new photo
@@ -80,7 +81,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     }
   };
 
-  const handleCameraCapture = (data: {
+  const handleCameraCapture = async (data: {
     photoUrl: string;
     latitude: number;
     longitude: number;
@@ -92,7 +93,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     if (photos.length >= maxPhotos) return;
 
     const newIndex = photos.length;
-    const updated = [...photos, data.photoUrl];
+    const combined = [...photos, data.photoUrl].slice(0, maxPhotos);
+    const updated = await ensureFirestoreSafePhotos(combined);
     onChange(updated);
 
     const gpsData: PhotoGpsData = {

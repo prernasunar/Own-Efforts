@@ -3,7 +3,7 @@
  * Designed for mobile field operations where photos need to be saved directly to Firestore docs
  */
 
-export async function compressImage(file: File, maxDimension: number = 960, quality: number = 0.75): Promise<string> {
+export async function compressImage(file: File, maxDimension: number = 820, quality: number = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -47,6 +47,83 @@ export async function compressImage(file: File, maxDimension: number = 960, qual
   });
 }
 
+export async function compressDataUrl(dataUrl: string, maxDimension: number = 720, quality: number = 0.58): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxDimension) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        }
+      } else {
+        if (height > maxDimension) {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Ensures total Base64 photo payload stays well under Firestore's 1MB (1,048,576 bytes) document limit
+ */
+export async function ensureFirestoreSafePhotos(photos: string[] = []): Promise<string[]> {
+  if (!photos || photos.length === 0) return [];
+
+  // First pass: ensure every individual photo exceeding 220KB is compressed
+  let processed: string[] = [];
+  for (const p of photos) {
+    if (p && p.startsWith('data:image') && p.length > 220000) {
+      processed.push(await compressDataUrl(p, 760, 0.6));
+    } else if (p) {
+      processed.push(p);
+    }
+  }
+
+  let totalChars = processed.reduce((sum, p) => sum + (p ? p.length : 0), 0);
+  if (totalChars <= 550000) return processed;
+
+  // Second pass: tighter compression if 3-4 photos combined exceed 550KB
+  const pass2: string[] = [];
+  for (const p of processed) {
+    if (p && p.startsWith('data:image')) {
+      pass2.push(await compressDataUrl(p, 640, 0.5));
+    } else if (p) {
+      pass2.push(p);
+    }
+  }
+
+  totalChars = pass2.reduce((sum, p) => sum + (p ? p.length : 0), 0);
+  if (totalChars <= 650000) return pass2;
+
+  // Final emergency pass so Firestore addDoc NEVER fails due to 1MB document limit
+  const pass3: string[] = [];
+  for (const p of pass2) {
+    if (p && p.startsWith('data:image')) {
+      pass3.push(await compressDataUrl(p, 520, 0.42));
+    } else if (p) {
+      pass3.push(p);
+    }
+  }
+  return pass3;
+}
+
 export async function processFileList(files: FileList | File[], currentCount: number = 0, maxAllowed: number = 4): Promise<string[]> {
   const remainingSlots = Math.max(0, maxAllowed - currentCount);
   if (remainingSlots <= 0) return [];
@@ -64,7 +141,7 @@ export async function processFileList(files: FileList | File[], currentCount: nu
     }
   }
 
-  return results;
+  return ensureFirestoreSafePhotos(results);
 }
 
 export function dataUrlToBlob(dataUrl: string): Blob {
