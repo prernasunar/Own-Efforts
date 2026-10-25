@@ -24,14 +24,17 @@ import {
   RefreshCw,
   Eye,
   Trash2,
+  Presentation,
 } from 'lucide-react';
 import { formatSingleEntryText, formatTeamReportText } from '../utils/share';
 import { ShareModal } from './ShareModal';
 import { PhotoLightbox } from './PhotoLightbox';
 import { ExcelExportModal } from './ExcelExportModal';
+import { PptExportModal } from './PptExportModal';
 import { AddWorkerModal } from './AddWorkerModal';
 import { EntryDetailPage } from './EntryDetailPage';
 import { exportCivilWorkToExcel } from '../utils/excelExporter';
+import { exportCivilWorkToPpt } from '../utils/pptExporter';
 
 /**
  * Checks if a work entry was logged today (checking both date string YYYY-MM-DD and createdAt timestamp)
@@ -122,8 +125,10 @@ export const ManagerDashboard: React.FC = () => {
   const [shareData, setShareData] = useState<{ title: string; text: string; photos?: string[] } | null>(null);
   const [lightboxData, setLightboxData] = useState<{ photos: string[]; index: number; title: string } | null>(null);
   const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
+  const [showPptModal, setShowPptModal] = useState<boolean>(false);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState<boolean>(false);
   const [quickExporting, setQuickExporting] = useState<boolean>(false);
+  const [quickPptExporting, setQuickPptExporting] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
 
   // Extract unique field executive names from active teamWorkers
@@ -322,6 +327,23 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
+  const handleQuickPptExportCurrentView = async () => {
+    setQuickPptExporting(true);
+    try {
+      await exportCivilWorkToPpt(entries, {
+        workerFilter: selectedWorker,
+        dateFilterType: selectedDate === 'TODAY' ? 'TODAY' : selectedDate === 'CUSTOM' ? 'CUSTOM_DATE' : 'ALL',
+        customDate: selectedDate === 'CUSTOM' ? customDate : undefined,
+        statusFilter: selectedStatus as any,
+        includeSummarySlide: true,
+      });
+    } catch (err) {
+      console.error('Error in quick PPT export:', err);
+    } finally {
+      setQuickPptExporting(false);
+    }
+  };
+
   const resetFilters = () => {
     setSelectedWorker('ALL');
     setSelectedDate('ALL');
@@ -415,6 +437,16 @@ export const ManagerDashboard: React.FC = () => {
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
               <span>Export to Excel</span>
+            </button>
+
+            {/* PowerPoint PPT Export Button */}
+            <button
+              onClick={() => setShowPptModal(true)}
+              className="flex items-center justify-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-600 active:bg-amber-800 text-white font-bold text-xs sm:text-sm shadow-md transition-all border border-amber-400/40 cursor-pointer"
+              title="Export site logs with photos to PowerPoint (.pptx) presentation"
+            >
+              <Presentation className="w-4 h-4 text-amber-200" />
+              <span>Export to PPT</span>
             </button>
 
             {/* Share All Button */}
@@ -850,7 +882,7 @@ export const ManagerDashboard: React.FC = () => {
               </div>
 
               <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-                {/* Quick Export Current View */}
+                {/* Quick Export Current View (Excel) */}
                 <button
                   type="button"
                   onClick={handleQuickExportCurrentView}
@@ -864,6 +896,22 @@ export const ManagerDashboard: React.FC = () => {
                 >
                   <Download className="w-3.5 h-3.5 text-emerald-700" />
                   <span>{quickExporting ? 'Exporting...' : `Export Excel (${filteredEntries.length})`}</span>
+                </button>
+
+                {/* Quick Export Current View (PPT) */}
+                <button
+                  type="button"
+                  onClick={handleQuickPptExportCurrentView}
+                  disabled={quickPptExporting || filteredEntries.length === 0}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                    filteredEntries.length === 0
+                      ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+                      : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 active:bg-amber-200'
+                  }`}
+                  title="Quickly download current filtered logs with photos as PowerPoint (.pptx)"
+                >
+                  <Presentation className="w-3.5 h-3.5 text-amber-700" />
+                  <span>{quickPptExporting ? 'Generating PPT...' : `Export PPT (${filteredEntries.length})`}</span>
                 </button>
 
                 {/* Add Worker Trigger */}
@@ -1232,6 +1280,14 @@ export const ManagerDashboard: React.FC = () => {
                 <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
                 <span>Export Team Excel</span>
               </button>
+
+              <button
+                onClick={() => setShowPptModal(true)}
+                className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <Presentation className="w-4 h-4 text-amber-200" />
+                <span>Export Team PPT</span>
+              </button>
             </div>
           </div>
 
@@ -1399,6 +1455,17 @@ export const ManagerDashboard: React.FC = () => {
         isOpen={showExcelModal}
         onClose={() => setShowExcelModal(false)}
         entries={entries}
+        initialWorker={selectedWorker}
+        initialDateType={selectedDate === 'CUSTOM' ? 'CUSTOM_DATE' : selectedDate === 'TODAY' ? 'TODAY' : 'ALL'}
+        initialCustomDate={customDate}
+      />
+
+      {/* Date-Wise & User-Wise PowerPoint (.pptx) Export Modal */}
+      <PptExportModal
+        isOpen={showPptModal}
+        onClose={() => setShowPptModal(false)}
+        entries={entries}
+        workerNames={uniqueWorkerNames}
         initialWorker={selectedWorker}
         initialDateType={selectedDate === 'CUSTOM' ? 'CUSTOM_DATE' : selectedDate === 'TODAY' ? 'TODAY' : 'ALL'}
         initialCustomDate={customDate}

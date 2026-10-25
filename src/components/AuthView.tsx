@@ -4,7 +4,7 @@ import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, 
 import { UserRole } from '../types';
 
 export const AuthView: React.FC = () => {
-  const { signIn, signUp, signInWithGoogle, instantLogin } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
 
   const [name, setName] = useState('');
@@ -41,30 +41,17 @@ export const AuthView: React.FC = () => {
       console.warn('Google auth warning:', err);
       if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
         setAuthTip(
-          'Google popup closed because this preview URL is not in Firebase Auth Authorized Domains. You can use 1-Click Instant Access below to sign in immediately without restrictions.'
+          'Google popup closed because this preview URL is not in Firebase Auth Authorized Domains. Please sign in or create an account with your email and password below.'
         );
       } else if (err?.code === 'auth/popup-blocked') {
-        setError('Popup was blocked by your mobile browser. Please allow popups or use 1-Click Instant Access below.');
+        setError('Popup was blocked by your mobile browser. Please allow popups or sign in with your email and password below.');
       } else if (err?.code === 'auth/network-request-failed') {
         setError('Network connection error. Please check your internet connection.');
       } else if (err?.message?.includes('disallowed_useragent') || err?.message?.includes('webview')) {
-        setError('Google blocks sign-in inside in-app browsers. Please tap 1-Click Instant Access below or open in Chrome/Safari.');
+        setError('Google blocks sign-in inside in-app browsers. Please open in Chrome/Safari or sign in with your email and password below.');
       } else {
-        setError(err.message || 'Google sign-in could not complete. Please use Instant 1-Click Access below.');
+        setError(err.message || 'Google sign-in could not complete. Please sign in with your email and password below.');
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInstantAccess = async (targetRole: UserRole) => {
-    setError(null);
-    setLoading(true);
-    try {
-      await instantLogin(targetRole);
-    } catch (err: any) {
-      console.error('Instant access error:', err);
-      setError('Could not start instant session. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -91,7 +78,7 @@ export const AuthView: React.FC = () => {
       console.error('Auth error:', err);
       let msg = err.message || 'Authentication failed. Please check credentials.';
       if (msg.includes('auth/operation-not-allowed')) {
-        msg = 'Email/Password sign-in is disabled. You can use Instant 1-Click Access below.';
+        msg = 'Email/Password sign-in is disabled. Please use Continue with Google above.';
       } else if (msg.includes('auth/invalid-credential') || msg.includes('auth/user-not-found') || msg.includes('auth/wrong-password')) {
         msg = 'Invalid email or password. Please check your credentials or create an account.';
       } else if (msg.includes('auth/email-already-in-use')) {
@@ -100,21 +87,6 @@ export const AuthView: React.FC = () => {
       setError(msg);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Quick Demo Autofills
-  const handleQuickDemo = (demoRole: UserRole) => {
-    if (demoRole === 'Manager') {
-      setEmail('manager@civilsite.com');
-      setPassword('manager123');
-      setName('Vikram Singh');
-      setRole('Manager');
-    } else {
-      setEmail('worker@civilsite.com');
-      setPassword('worker123');
-      setName('Rajesh Kumar');
-      setRole('Field Executive');
     }
   };
 
@@ -176,15 +148,6 @@ export const AuthView: React.FC = () => {
               <div className="flex-1">
                 <p className="font-semibold text-rose-900">Sign In Issue</p>
                 <p className="text-xs text-rose-700 mt-0.5">{error}</p>
-                <div className="mt-2.5 flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => handleInstantAccess(role)}
-                    className="text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-md shadow-xs"
-                  >
-                    Enter as {role} (Instant Access)
-                  </button>
-                </div>
               </div>
             </div>
           )}
@@ -193,21 +156,13 @@ export const AuthView: React.FC = () => {
             <div className="mb-5 p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-sm flex items-start space-x-2.5">
               <Sparkles className="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-amber-900">Domain Note</p>
+                <p className="font-semibold text-amber-900">Sign In Tip</p>
                 <p className="text-xs text-amber-800 mt-0.5">{authTip}</p>
-                <button
-                  type="button"
-                  onClick={() => handleInstantAccess(role)}
-                  className="mt-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg shadow-xs flex items-center space-x-1"
-                >
-                  <span>Continue with 1-Click Instant Access</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
               </div>
             </div>
           )}
 
-          {/* Quick Role Selection for Google & Quick Access */}
+          {/* Quick Role Selection for Google & Sign In */}
           <div className="mb-4">
             <label className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-2">
               Sign In As:
@@ -290,7 +245,7 @@ export const AuthView: React.FC = () => {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Rajesh Kumar"
+                    placeholder="Enter your full name"
                     className="block w-full pl-11 pr-3 py-3 rounded-xl border border-stone-300 text-stone-900 placeholder-stone-400 text-base focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none"
                   />
                 </div>
@@ -412,54 +367,6 @@ export const AuthView: React.FC = () => {
               <ArrowRight className="w-5 h-5" />
             </button>
           </form>
-
-          {/* Instant 1-Click Access for Evaluation & Offline Test */}
-          <div className="mt-6 pt-5 border-t border-stone-200">
-            <div className="flex items-center justify-between mb-2.5">
-              <p className="text-xs font-bold text-stone-600 uppercase tracking-wider flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Instant 1-Click Access</span>
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <button
-                type="button"
-                onClick={() => handleInstantAccess('Field Executive')}
-                disabled={loading}
-                className="p-2.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-xl border border-amber-300 text-center transition-all shadow-xs disabled:opacity-50"
-              >
-                👷 Instant Executive
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInstantAccess('Manager')}
-                disabled={loading}
-                className="p-2.5 text-xs font-bold text-stone-900 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 rounded-xl border border-stone-300 text-center transition-all shadow-xs disabled:opacity-50"
-              >
-                👔 Instant Manager
-              </button>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-stone-500 pt-1">
-              <span>Need form autofill?</span>
-              <div className="space-x-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo('Field Executive')}
-                  className="underline hover:text-amber-800 font-semibold"
-                >
-                  Fill Executive
-                </button>
-                <span>•</span>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo('Manager')}
-                  className="underline hover:text-amber-800 font-semibold"
-                >
-                  Fill Manager
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

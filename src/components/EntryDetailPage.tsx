@@ -22,8 +22,10 @@ import {
   Edit2,
   Trash2,
   Layers,
+  Presentation,
 } from 'lucide-react';
 import { downloadPhoto, downloadAllPhotos } from '../utils/imageUtils';
+import { exportSingleEntryToPpt } from '../utils/pptExporter';
 import { PhotoLightbox } from './PhotoLightbox';
 
 interface EntryDetailPageProps {
@@ -47,6 +49,18 @@ export const EntryDetailPage: React.FC<EntryDetailPageProps> = ({
   const [activePhotoIndex, setActivePhotoIndex] = useState<number>(0);
   const [lightboxOpen, setLightboxOpen] = useState<boolean>(false);
   const [copiedCoords, setCopiedCoords] = useState<boolean>(false);
+  const [exportingPpt, setExportingPpt] = useState<boolean>(false);
+
+  const handleExportSinglePpt = async () => {
+    setExportingPpt(true);
+    try {
+      await exportSingleEntryToPpt(entry);
+    } catch (err) {
+      console.error('Error exporting single entry to PPT:', err);
+    } finally {
+      setExportingPpt(false);
+    }
+  };
 
   // Scroll to top when opening the detail page
   useEffect(() => {
@@ -179,6 +193,17 @@ export const EntryDetailPage: React.FC<EntryDetailPageProps> = ({
               <span>Delete</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={handleExportSinglePpt}
+            disabled={exportingPpt}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-800 hover:bg-amber-700 active:bg-amber-900 text-white font-bold text-xs sm:text-sm shadow-xs border border-amber-600/40 transition-all cursor-pointer disabled:opacity-50"
+            title="Download this work log as a PowerPoint (.pptx) presentation slide with photos"
+          >
+            <Presentation className="w-4 h-4 text-amber-200" />
+            <span>{exportingPpt ? 'Exporting PPT...' : 'Export to PPT'}</span>
+          </button>
 
           <button
             type="button"

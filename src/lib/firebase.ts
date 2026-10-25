@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  Firestore,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
 
 export interface FirebaseConfigType {
@@ -35,30 +41,40 @@ if (getApps().length === 0) {
   app = getApp();
 }
 
-// Initialize Firestore with specific database ID if provided in config
-export const db: Firestore = FIREBASE_CONFIG.firestoreDatabaseId
-  ? getFirestore(app, FIREBASE_CONFIG.firestoreDatabaseId)
-  : getFirestore(app);
+function createFirestoreInstance(firebaseApp: FirebaseApp, databaseId?: string): Firestore {
+  try {
+    return databaseId
+      ? initializeFirestore(
+          firebaseApp,
+          { experimentalAutoDetectLongPolling: true },
+          databaseId
+        )
+      : initializeFirestore(firebaseApp, {
+          experimentalAutoDetectLongPolling: true,
+        });
+  } catch {
+    return databaseId ? getFirestore(firebaseApp, databaseId) : getFirestore(firebaseApp);
+  }
+}
+
+// Initialize Firestore with specific database ID and long-polling auto-detection for reliable connectivity
+export const db: Firestore = createFirestoreInstance(app, FIREBASE_CONFIG.firestoreDatabaseId);
 export const auth: Auth = getAuth(app);
 export const appInstance = app;
 
-// Safe lazy connection checker as mandated by Firebase skill
 export async function testConnection() {
-  if (!db) return;
+  if (!db || !auth?.currentUser) return;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
+    await getDoc(doc(db, 'test', 'connection'));
+  } catch {
+    // Ignore transient offline or permission checks during startup
   }
 }
-testConnection();
 
 export async function checkFirestoreConnection() {
   if (!db) return false;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await getDoc(doc(db, 'test', 'connection'));
     return true;
   } catch {
     return false;
