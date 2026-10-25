@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Responsive Viewport & Safe-Area Insets for All Devices */
 :root {
@@ -19,6 +20,128 @@ body {
   -webkit-tap-highlight-color: transparent;
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+/* Global Dark Mode Surface & Typography Adaptation */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0c0a09;
+  color: #f5f5f4;
+}
+
+html.dark .bg-stone-100 {
+  background-color: #0c0a09 !important;
+}
+
+html.dark .bg-white {
+  background-color: #1c1917 !important;
+}
+
+html.dark .bg-stone-50,
+html.dark .bg-stone-50\/80,
+html.dark .bg-stone-50\/60,
+html.dark .bg-stone-50\/50 {
+  background-color: #141210 !important;
+}
+
+html.dark .bg-stone-200,
+html.dark .bg-stone-200\/90,
+html.dark .bg-stone-200\/70 {
+  background-color: #292524 !important;
+}
+
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/70,
+html.dark .bg-amber-50\/60,
+html.dark .bg-amber-50\/50,
+html.dark .bg-amber-50\/40 {
+  background-color: rgba(217, 119, 6, 0.14) !important;
+}
+
+html.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+
+html.dark .bg-sky-50 {
+  background-color: rgba(14, 165, 233, 0.14) !important;
+}
+
+html.dark .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.14) !important;
+}
+
+html.dark .text-stone-900 {
+  color: #fafaf9 !important;
+}
+
+html.dark .text-stone-800 {
+  color: #e7e5e4 !important;
+}
+
+html.dark .text-stone-700 {
+  color: #d6d3d1 !important;
+}
+
+html.dark .text-stone-600 {
+  color: #a8a29e !important;
+}
+
+html.dark .text-stone-500 {
+  color: #78716c !important;
+}
+
+html.dark .text-amber-900,
+html.dark .text-amber-800,
+html.dark .text-amber-700 {
+  color: #fcd34d !important;
+}
+
+html.dark .text-emerald-800,
+html.dark .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+
+html.dark .text-sky-800,
+html.dark .text-sky-700 {
+  color: #7dd3fc !important;
+}
+
+html.dark .text-rose-900,
+html.dark .text-rose-800,
+html.dark .text-rose-700 {
+  color: #fda4af !important;
+}
+
+html.dark .border-stone-200,
+html.dark .border-stone-200\/80,
+html.dark .border-stone-100 {
+  border-color: #292524 !important;
+}
+
+html.dark .border-stone-300,
+html.dark .border-stone-300\/80 {
+  border-color: #44403c !important;
+}
+
+html.dark .divide-stone-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-stone-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #292524 !important;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #141210 !important;
+  color: #fafaf9 !important;
+  border-color: #44403c !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #78716c !important;
 }
 
 /* Ensure inputs on touch devices don't trigger browser auto-zoom (<16px on iOS triggers zoom) */

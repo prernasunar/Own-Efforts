@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { HardHat, Users, Lock, Mail, User as UserIcon, ArrowRight, AlertCircle, Sparkles, Sun, Moon } from 'lucide-react';
 import { UserRole } from '../types';
 
 export const AuthView: React.FC = () => {
   const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
 
   const [name, setName] = useState('');
@@ -91,7 +93,29 @@ export const AuthView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col justify-center px-4 py-8 sm:px-6 lg:px-8 font-sans">
+    <div className="min-h-screen bg-stone-100 flex flex-col justify-center px-4 py-8 sm:px-6 lg:px-8 font-sans relative transition-colors duration-200">
+      {/* Top-right Light / Dark Mode Toggle */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 shadow-sm text-xs font-bold transition-all active:scale-95 cursor-pointer"
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-4 h-4 text-amber-400" />
+              <span>Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-4 h-4 text-stone-600" />
+              <span>Dark Mode</span>
+            </>
+          )}
+        </button>
+      </div>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         {/* App Icon & Branding */}
         <div className="flex justify-center">

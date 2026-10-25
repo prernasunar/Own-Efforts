@@ -53,6 +53,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   );
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
+  const [exportErrorMsg, setExportErrorMsg] = useState<string | null>(null);
 
   // Extract unique worker names
   const uniqueWorkerNames = useMemo(() => {
@@ -112,6 +113,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const handleExport = () => {
     setExporting(true);
     setExportSuccessMsg(null);
+    setExportErrorMsg(null);
 
     try {
       const result = exportCivilWorkToExcel(entries, currentOptions);
@@ -122,11 +124,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           onClose();
         }, 1800);
       } else {
-        alert(result.message || 'No entries to export.');
+        setExportErrorMsg(result.message || 'No entries to export.');
       }
     } catch (err) {
       console.error('Error generating Excel:', err);
-      alert('Failed to generate Excel file. Please check console.');
+      setExportErrorMsg('Failed to generate Excel file. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -162,11 +164,16 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
           {exportSuccessMsg && (
             <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2 animate-fadeIn">
               <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0" />
               <span>{exportSuccessMsg}</span>
+            </div>
+          )}
+          {exportErrorMsg && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs font-bold flex items-center space-x-2 animate-fadeIn">
+              <span>{exportErrorMsg}</span>
             </div>
           )}
 
