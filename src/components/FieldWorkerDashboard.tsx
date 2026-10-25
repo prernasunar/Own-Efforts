@@ -27,6 +27,7 @@ import {
   Calendar,
   Search,
   Filter,
+  Eye,
 } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { formatSingleEntryText, formatWorkerBatchReportText } from '../utils/share';
@@ -34,6 +35,7 @@ import { EditEntryModal } from './EditEntryModal';
 import { ShareModal } from './ShareModal';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
+import { EntryDetailPage } from './EntryDetailPage';
 import { PhotoGpsData } from '../utils/photoGpsExtractor';
 
 export const FieldWorkerDashboard: React.FC = () => {
@@ -91,7 +93,8 @@ export const FieldWorkerDashboard: React.FC = () => {
   // Multi-select batch sharing state
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
 
-  // Modals & Lightbox state
+  // Modals, Lightbox & Detail Page state
+  const [selectedEntryForDetail, setSelectedEntryForDetail] = useState<WorkEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<WorkEntry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [shareData, setShareData] = useState<{ title: string; text: string; photos?: string[] } | null>(null);
@@ -256,6 +259,72 @@ export const FieldWorkerDashboard: React.FC = () => {
     (sum, e) => sum + (e.photos?.length || 0),
     0
   );
+
+  const activeDetailEntry = selectedEntryForDetail
+    ? myEntries.find((e) => e.id === selectedEntryForDetail.id) || selectedEntryForDetail
+    : null;
+
+  if (activeDetailEntry) {
+    return (
+      <>
+        <EntryDetailPage
+          entry={activeDetailEntry}
+          onBack={() => setSelectedEntryForDetail(null)}
+          onShare={(entry) => handleShareEntry(entry)}
+          onEdit={(entry) => setEditingEntry(entry)}
+          onDelete={(entry) => setDeletingId(entry.id)}
+        />
+        {editingEntry && (
+          <EditEntryModal
+            entry={editingEntry}
+            workTypes={workTypes}
+            isOpen={Boolean(editingEntry)}
+            onClose={() => setEditingEntry(null)}
+            onSave={async (id, data) => {
+              await updateEntry(id, data);
+              setEditingEntry(null);
+            }}
+          />
+        )}
+        {shareData && (
+          <ShareModal
+            isOpen={Boolean(shareData)}
+            onClose={() => setShareData(null)}
+            title={shareData.title}
+            shareText={shareData.text}
+            photos={shareData.photos}
+          />
+        )}
+        {deletingId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-stone-200 animate-in fade-in zoom-in-95 duration-150">
+              <h4 className="text-base font-bold text-stone-900 mb-2">Delete Work Entry?</h4>
+              <p className="text-xs text-stone-600 mb-4">
+                This action cannot be undone. Are you sure you want to permanently remove this entry?
+              </p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setDeletingId(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-stone-300 text-xs font-bold text-stone-700 hover:bg-stone-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleDeleteConfirm(deletingId);
+                    setSelectedEntryForDetail(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-bold text-white shadow-sm"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 font-sans">
@@ -765,11 +834,11 @@ export const FieldWorkerDashboard: React.FC = () => {
                 return (
                   <div
                     key={entry.id}
-                    onClick={() => toggleSelectEntry(entry.id)}
+                    onClick={() => setSelectedEntryForDetail(entry)}
                     className={`bg-white rounded-2xl p-4 sm:p-5 shadow-sm border transition-all cursor-pointer ${
                       isSelected
                         ? 'border-amber-500 ring-2 ring-amber-400/50 bg-amber-50/25'
-                        : 'border-stone-200 hover:border-amber-300'
+                        : 'border-stone-200 hover:border-amber-400 hover:shadow-md'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2.5 mb-2.5">
@@ -949,6 +1018,16 @@ export const FieldWorkerDashboard: React.FC = () => {
 
                       <div className="flex items-center space-x-1.5">
                         <button
+                          type="button"
+                          onClick={() => setSelectedEntryForDetail(entry)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-800 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-amber-600" />
+                          <span>View Details</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => toggleSelectEntry(entry.id)}
                           className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                             isSelected
@@ -961,6 +1040,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleShareEntry(entry)}
                           className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-black text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs"
                         >

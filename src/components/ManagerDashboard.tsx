@@ -22,12 +22,15 @@ import {
   Download,
   UserPlus,
   RefreshCw,
+  Eye,
+  Trash2,
 } from 'lucide-react';
 import { formatSingleEntryText, formatTeamReportText } from '../utils/share';
 import { ShareModal } from './ShareModal';
 import { PhotoLightbox } from './PhotoLightbox';
 import { ExcelExportModal } from './ExcelExportModal';
 import { AddWorkerModal } from './AddWorkerModal';
+import { EntryDetailPage } from './EntryDetailPage';
 import { exportCivilWorkToExcel } from '../utils/excelExporter';
 
 /**
@@ -102,7 +105,7 @@ function isEntryOnDate(entry: WorkEntry, dateStr: string): boolean {
 
 export const ManagerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
-  const { entries, teamWorkers, loading, addWorker, refreshData } = useWorkData();
+  const { entries, teamWorkers, loading, addWorker, removeWorker, refreshData } = useWorkData();
 
   // Active view tab: 'logs' or 'workers'
   const [activeTab, setActiveTab] = useState<'logs' | 'workers'>('logs');
@@ -114,7 +117,8 @@ export const ManagerDashboard: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL', 'Pending', 'Done'
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Modals State
+  // Modals & Detail Page State
+  const [selectedEntryForDetail, setSelectedEntryForDetail] = useState<WorkEntry | null>(null);
   const [shareData, setShareData] = useState<{ title: string; text: string; photos?: string[] } | null>(null);
   const [lightboxData, setLightboxData] = useState<{ photos: string[]; index: number; title: string } | null>(null);
   const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
@@ -122,17 +126,27 @@ export const ManagerDashboard: React.FC = () => {
   const [quickExporting, setQuickExporting] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
 
-  // Extract unique worker names combining registered team members & submitted entries
+  // Extract unique field executive names from active teamWorkers
   const uniqueWorkerNames = useMemo(() => {
-    const names = new Set<string>();
+    const map = new Map<string, string>();
     teamWorkers.forEach((w) => {
-      if (w.name && w.name.trim()) names.add(w.name.trim());
+      if (w.name && w.name.trim()) {
+        const key = w.name.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, w.name.trim());
+        }
+      }
     });
-    entries.forEach((e) => {
-      if (e.userName && e.userName.trim()) names.add(e.userName.trim());
-    });
-    return Array.from(names).sort();
-  }, [teamWorkers, entries]);
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [teamWorkers]);
+
+  const handleRemoveExecutive = async (e: React.MouseEvent, workerName: string, uid?: string) => {
+    e.stopPropagation();
+    if (selectedWorker.trim().toLowerCase() === workerName.trim().toLowerCase()) {
+      setSelectedWorker('ALL');
+    }
+    await removeWorker(workerName, uid);
+  };
 
   // Comprehensive Worker Statistics for Manager Roster
   const workerStats = useMemo(() => {
@@ -163,9 +177,10 @@ export const ManagerDashboard: React.FC = () => {
       const latestEntry = workerEntries[0];
 
       return {
+        uid: registeredProfile?.uid,
         name: workerName,
         email: registeredProfile?.email || `${cleanName.replace(/\s+/g, '.')}@site.work`,
-        role: registeredProfile?.role || 'Field Worker',
+        role: registeredProfile?.role || 'Field Executive',
         totalEntries,
         doneEntries,
         pendingEntries,
@@ -328,6 +343,35 @@ export const ManagerDashboard: React.FC = () => {
       setTimeout(() => setSyncing(false), 500);
     }
   };
+
+  const activeDetailEntry = selectedEntryForDetail
+    ? entries.find((e) => e.id === selectedEntryForDetail.id) || selectedEntryForDetail
+    : null;
+
+  if (activeDetailEntry) {
+    return (
+      <>
+        <EntryDetailPage
+          entry={activeDetailEntry}
+          onBack={() => setSelectedEntryForDetail(null)}
+          onShare={(entry) => handleShareSingle(entry)}
+          onFilterByWorker={(workerName) => {
+            setSelectedEntryForDetail(null);
+            selectWorkerAndFilterLogs(workerName);
+          }}
+        />
+        {shareData && (
+          <ShareModal
+            isOpen={Boolean(shareData)}
+            onClose={() => setShareData(null)}
+            title={shareData.title}
+            shareText={shareData.text}
+            photos={shareData.photos}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 font-sans">
@@ -525,17 +569,27 @@ export const ManagerDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end flex-shrink-0">
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
-                      w.activeToday
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                        : 'bg-stone-200/80 text-stone-700 border-stone-300'
-                    }`}
-                  >
-                    {w.todayCount > 0 ? `${w.todayCount} Today` : '0 Today'}
-                  </span>
-                  <span className="text-[10px] text-amber-700 font-bold mt-1">
+                <div className="flex flex-col items-end flex-shrink-0 gap-1">
+                  <div className="flex items-center space-x-1.5">
+                    <span
+                      className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
+                        w.activeToday
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-stone-200/80 text-stone-700 border-stone-300'
+                      }`}
+                    >
+                      {w.todayCount > 0 ? `${w.todayCount} Today` : '0 Today'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleRemoveExecutive(e, w.name, w.uid)}
+                      className="p-1 rounded-lg text-stone-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer"
+                      title={`Remove ${w.name} from Field Executives list`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-amber-700 font-bold">
                     {isSelected ? '✓ Viewing' : 'View Logs →'}
                   </span>
                 </div>
@@ -930,7 +984,8 @@ export const ManagerDashboard: React.FC = () => {
                   return (
                     <div
                       key={entry.id}
-                      className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-stone-200 hover:border-amber-400 transition-all"
+                      onClick={() => setSelectedEntryForDetail(entry)}
+                      className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-stone-200 hover:border-amber-400 hover:shadow-md transition-all cursor-pointer group"
                     >
                       {/* Top Bar: Worker Name Highlight + Status Badge */}
                       <div className="flex items-start justify-between gap-3 mb-3">
@@ -944,7 +999,7 @@ export const ManagerDashboard: React.FC = () => {
                                   .join('')
                                   .substring(0, 2)
                                   .toUpperCase()
-                              : 'FW'}
+                              : 'FE'}
                           </div>
 
                           <div>
@@ -952,14 +1007,17 @@ export const ManagerDashboard: React.FC = () => {
                             <div className="flex items-center space-x-2 flex-wrap">
                               <button
                                 type="button"
-                                onClick={() => selectWorkerAndFilterLogs(entry.userName)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  selectWorkerAndFilterLogs(entry.userName);
+                                }}
                                 className="font-extrabold text-sm sm:text-base text-stone-900 hover:text-amber-800 transition-colors text-left cursor-pointer flex items-center space-x-1"
-                                title="Click to view all logs from this worker"
+                                title="Click to view all logs from this Field Executive"
                               >
                                 <span>{entry.userName}</span>
                               </button>
                               <span className="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-600 font-semibold border border-stone-200">
-                                Field Worker
+                                Field Executive
                               </span>
                             </div>
                             <h4 className="text-base sm:text-lg font-black text-amber-900 mt-0.5">
@@ -1092,22 +1150,41 @@ export const ManagerDashboard: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Share Individual Log */}
-                      <div className="flex items-center justify-between pt-1 border-t border-stone-100">
-                        <span className="text-[11px] text-stone-400 font-medium italic">
-                          Verified site log • UID: {entry.uid ? entry.uid.substring(0, 8) + '...' : 'System'}
-                        </span>
+                      {/* Share Individual Log & View Details */}
+                      <div
+                        className="flex items-center justify-between pt-1 border-t border-stone-100 flex-wrap gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEntryForDetail(entry)}
+                          className="inline-flex items-center space-x-1.5 text-xs font-extrabold text-amber-800 hover:text-amber-950 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Click to View Full Page Details & Photos →</span>
+                        </button>
 
                         <div className="flex items-center space-x-2">
                           <button
+                            type="button"
                             onClick={() => selectWorkerAndFilterLogs(entry.userName)}
                             className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors cursor-pointer"
                           >
                             <UserIcon className="w-3 h-3 text-stone-500" />
-                            <span>Worker Logs</span>
+                            <span>Executive Logs</span>
                           </button>
 
                           <button
+                            type="button"
+                            onClick={() => setSelectedEntryForDetail(entry)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-900 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-amber-600" />
+                            <span>View Details</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => handleShareSingle(entry)}
                             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-amber-300 transition-colors shadow-xs cursor-pointer"
                           >
@@ -1277,6 +1354,15 @@ export const ManagerDashboard: React.FC = () => {
                     >
                       <Share2 className="w-3.5 h-3.5" />
                       <span>Share</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleRemoveExecutive(e, w.name, w.uid)}
+                      className="inline-flex items-center justify-center p-2 rounded-xl text-xs font-bold text-stone-500 hover:text-red-700 bg-stone-100 hover:bg-red-50 border border-stone-200 hover:border-red-200 transition-colors cursor-pointer"
+                      title={`Remove ${w.name} from Field Executives list`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>

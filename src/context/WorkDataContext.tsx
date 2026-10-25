@@ -59,9 +59,11 @@ interface WorkDataContextType {
   entries: WorkEntry[];
   myEntries: WorkEntry[];
   teamWorkers: UserProfile[];
+  removedWorkerNames: string[];
   loading: boolean;
   addWorkType: (name: string, uom: UOMType) => Promise<void>;
   addWorker: (worker: { name: string; email?: string; role?: UserRole }) => Promise<UserProfile>;
+  removeWorker: (workerName: string, uid?: string) => Promise<void>;
   createEntry: (entryData: {
     userName?: string;
     workType?: string;
@@ -87,13 +89,28 @@ const WorkDataContext = createContext<WorkDataContextType | undefined>(undefined
 const LOCAL_ENTRIES_KEY = 'civil_site_entries_data';
 const LOCAL_CUSTOM_WORKTYPES_KEY = 'civil_site_custom_worktypes';
 const LOCAL_USERS_DB_KEY = 'civil_site_users_db';
+const LOCAL_REMOVED_WORKERS_KEY = 'civil_site_removed_workers_v2';
 
-const INITIAL_DEMO_WORKERS: UserProfile[] = [
-  { uid: 'demo_worker_1', name: 'Rajesh Kumar', email: 'rajesh.kumar@civilsite.work', role: 'Field Executive' },
-  { uid: 'demo_worker_2', name: 'Amit Sharma', email: 'amit.sharma@civilsite.work', role: 'Field Executive' },
-  { uid: 'demo_worker_3', name: 'Suresh Patel', email: 'suresh.patel@civilsite.work', role: 'Field Executive' },
-  { uid: 'demo_worker_4', name: 'Vikram Singh', email: 'vikram.singh@civilsite.work', role: 'Field Executive' },
+const DEFAULT_EXCLUDED_WORKER_NAMES = [
+  'rajesh kumar',
+  'rajesh kumar (field worker)',
+  'amit sharma',
+  'suresh patel',
+  'vikram singh',
+  'field supervisor',
+  'site manager',
+  'field worker',
+  'prashant gamre',
 ];
+
+const SYSTEM_BRIDGE_EMAILS = new Set([
+  'worker@civilsite.com',
+  'manager@civilsite.com',
+  'prashantgamre00@gmail.com',
+  'prernasunar@gmail.com',
+]);
+
+const INITIAL_DEMO_WORKERS: UserProfile[] = [];
 
 const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
   {
@@ -183,6 +200,18 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [customWorkTypes, setCustomWorkTypes] = useState<WorkTypeItem[]>([]);
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>(INITIAL_DEMO_WORKERS);
+  const [removedWorkerNames, setRemovedWorkerNames] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_REMOVED_WORKERS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return Array.from(new Set([...DEFAULT_EXCLUDED_WORKER_NAMES, ...parsed.map((n: string) => String(n).trim().toLowerCase())]));
+        }
+      }
+    } catch {}
+    return DEFAULT_EXCLUDED_WORKER_NAMES;
+  });
   const [loading, setLoading] = useState<boolean>(true);
 
   const isSupabase = isSupabaseConfigured();
@@ -193,44 +222,54 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ...customWorkTypes,
   ], [customWorkTypes]);
 
-  // Aggregate all unique workers from registered users, submitted entries, and current user
+  const removedSet = useMemo(
+    () => new Set(removedWorkerNames.map((n) => n.trim().toLowerCase())),
+    [removedWorkerNames]
+  );
+
+  // Aggregate all unique field executives from registered users and submitted entries
   const teamWorkers = useMemo(() => {
     const map = new Map<string, UserProfile>();
 
-    // 1. Check if we have real registered users from Firestore
-    const realUsers = registeredUsers.filter((u) => !u.uid.startsWith('demo_'));
-    const hasRealUsers = realUsers.length > 0;
+    const isExcludedProfile = (u: Partial<UserProfile>) => {
+      const key = (u.name || '').trim().toLowerCase();
+      if (!key) return true;
+      if (removedSet.has(key)) return true;
+      if (u.role === 'Manager') return true;
+      if (u.email && SYSTEM_BRIDGE_EMAILS.has(u.email.trim().toLowerCase())) return true;
+      return false;
+    };
 
-    if (hasRealUsers) {
-      // Prioritize real site team workers from database (e.g. Ganesh Kumbhar, Prashant Gamre)
-      realUsers.forEach((u) => {
-        if (u.name && u.name.trim()) {
-          map.set(u.name.trim().toLowerCase(), u);
-        }
-      });
-    } else {
-      // Only seed with demo workers if database has zero real workers registered
-      INITIAL_DEMO_WORKERS.forEach((w) => map.set(w.name.trim().toLowerCase(), w));
-    }
+    // 1. Add real registered field executives from Firestore
+    const realUsers = registeredUsers.filter((u) => !u.uid.startsWith('demo_') && !isExcludedProfile(u));
+    realUsers.forEach((u) => {
+      const key = u.name.trim().toLowerCase();
+      map.set(key, u);
+    });
 
-    // 2. Add any worker who has submitted entries
+    // 2. Add any field executive who has submitted entries (unless excluded/removed)
     entries.forEach((e) => {
       if (e.userName && e.userName.trim()) {
         const cleanName = e.userName.trim();
         const key = cleanName.toLowerCase();
-        if (!map.has(key)) {
+        if (!map.has(key) && !removedSet.has(key)) {
           map.set(key, {
             uid: e.uid || 'worker_' + key,
             name: cleanName,
             email: `${cleanName.toLowerCase().replace(/\s+/g, '.')}@site.work`,
-            role: 'Field Worker',
+            role: 'Field Executive',
           });
         }
       }
     });
 
-    // 3. Ensure current logged-in user is in the list
-    if (userProfile?.name && userProfile.name.trim()) {
+    // 3. Ensure current logged-in Field Executive is in the list (if not a Manager or excluded)
+    if (
+      userProfile?.name &&
+      userProfile.name.trim() &&
+      userProfile.role !== 'Manager' &&
+      !isExcludedProfile(userProfile)
+    ) {
       const cleanName = userProfile.name.trim();
       const key = cleanName.toLowerCase();
       if (!map.has(key)) {
@@ -239,7 +278,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     return Array.from(map.values());
-  }, [registeredUsers, entries, userProfile]);
+  }, [registeredUsers, entries, userProfile, removedSet]);
 
   // Real-time Firestore synchronization + automatic upload of any unsynced local entries
   useEffect(() => {
@@ -293,9 +332,12 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (localRaw && db && auth.currentUser) {
           const localParsed = JSON.parse(localRaw);
           if (Array.isArray(localParsed)) {
-            const pendingLocal = localParsed.filter(
-              (item: any) => item && typeof item.id === 'string' && item.id.startsWith('entry_')
-            );
+            const pendingLocal = localParsed.filter((item: any) => {
+              if (!item || typeof item.id !== 'string' || !item.id.startsWith('entry_')) return false;
+              const itemName = String(item.userName || '').trim().toLowerCase();
+              if (DEFAULT_EXCLUDED_WORKER_NAMES.includes(itemName)) return false;
+              return true;
+            });
             if (pendingLocal.length > 0) {
               const remainingLocal = localParsed.filter(
                 (item: any) => !item || typeof item.id !== 'string' || !item.id.startsWith('entry_')
@@ -723,12 +765,73 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(localUsers));
     } catch {}
 
+    setRemovedWorkerNames((prev) => {
+      const updated = prev.filter((n) => n.trim().toLowerCase() !== trimmedName.toLowerCase());
+      try {
+        localStorage.setItem(LOCAL_REMOVED_WORKERS_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     setRegisteredUsers((prev) => {
       const exists = prev.some((w) => w.name.toLowerCase() === trimmedName.toLowerCase());
       return exists ? prev : [newWorker, ...prev];
     });
 
     return newWorker;
+  };
+
+  const removeWorker = async (workerName: string, uid?: string): Promise<void> => {
+    const cleanKey = workerName.trim().toLowerCase();
+    if (!cleanKey) return;
+
+    setRemovedWorkerNames((prev) => {
+      const updated = Array.from(new Set([...prev, cleanKey]));
+      try {
+        localStorage.setItem(LOCAL_REMOVED_WORKERS_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const targetUsers = registeredUsers.filter(
+      (u) => u.name.trim().toLowerCase() === cleanKey || (uid && u.uid === uid)
+    );
+
+    setRegisteredUsers((prev) =>
+      prev.filter((u) => u.name.trim().toLowerCase() !== cleanKey && (!uid || u.uid !== uid))
+    );
+
+    try {
+      const localUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_DB_KEY) || '{}');
+      Object.keys(localUsers).forEach((k) => {
+        if (
+          k === uid ||
+          (localUsers[k]?.name && String(localUsers[k].name).trim().toLowerCase() === cleanKey)
+        ) {
+          delete localUsers[k];
+        }
+      });
+      localStorage.setItem(LOCAL_USERS_DB_KEY, JSON.stringify(localUsers));
+    } catch {}
+
+    if (isFirebase && db && auth?.currentUser) {
+      const uidsToDelete = new Set<string>();
+      if (uid && !uid.startsWith('demo_') && !uid.startsWith('worker_')) {
+        uidsToDelete.add(uid);
+      }
+      targetUsers.forEach((tu) => {
+        if (tu.uid && !tu.uid.startsWith('demo_')) {
+          uidsToDelete.add(tu.uid);
+        }
+      });
+      for (const targetUid of uidsToDelete) {
+        try {
+          await deleteDoc(doc(db, 'users', targetUid));
+        } catch (err) {
+          console.warn('Could not delete user doc from Firestore:', err);
+        }
+      }
+    }
   };
 
   const createEntry = async (entryData: {
@@ -935,9 +1038,11 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         entries,
         myEntries,
         teamWorkers,
+        removedWorkerNames,
         loading,
         addWorkType,
         addWorker,
+        removeWorker,
         createEntry,
         updateEntry,
         deleteEntry,

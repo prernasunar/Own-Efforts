@@ -30,6 +30,8 @@ service cloud.firestore {
     function isManager() {
       return isSignedIn() && (
         (request.auth.token.email == 'prernasunar@gmail.com') ||
+        (request.auth.token.email == 'prashantgamre00@gmail.com') ||
+        (request.auth.token.email == 'manager@civilsite.com') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole() == 'Manager')
       );
     }
@@ -48,7 +50,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && (request.auth.uid == userId || isManager() || incoming().role in ['Field Worker', 'Field Executive']) && isValidUser(incoming());
       allow update: if isSignedIn() && (request.auth.uid == userId || isManager()) && isValidUser(incoming()) &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'email']);
-      allow delete: if false;
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isManager());
     }
 
     // Work Types Collection Rules (Shared across team)
