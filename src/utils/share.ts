@@ -1,4 +1,4 @@
-import { WorkEntry } from '../types';
+import { WorkEntry, getEntryMaterials, formatMaterialItem } from '../types';
 
 export function formatSingleEntryText(entry: WorkEntry): string {
   const dateStr = entry.createdAt?.toDate 
@@ -10,6 +10,16 @@ export function formatSingleEntryText(entry: WorkEntry): string {
   const formattedWorkDate = entry.date
     ? new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
     : '';
+  const mats = getEntryMaterials(entry);
+  const materialLines =
+    mats.length > 1
+      ? [
+          `📦 *Materials & MOU:*`,
+          ...mats.map((m, i) => `   ${i + 1}. ${formatMaterialItem(m)}`),
+        ]
+      : mats.length === 1
+      ? [`📦 *Material & MOU:* ${formatMaterialItem(mats[0])}`]
+      : [];
 
   const lines = [
     `🏗️ *CIVIL WORK SITE LOG*`,
@@ -20,6 +30,7 @@ export function formatSingleEntryText(entry: WorkEntry): string {
     displayLoc ? `📍 *Location:* ${displayLoc}` : '',
     entry.latLong ? `🌐 *Lat & Log:* ${entry.latLong}` : '',
     `🚦 *Status:* ${entry.status === 'Rectify by Genesis' ? '🏢 Rectify by Genesis' : '🔧 Rectify by us'}`,
+    ...materialLines,
     entry.remark ? `📝 *Remark:* ${entry.remark}` : '',
     entry.photos && entry.photos.length > 0 ? `📸 *Photos:* ${entry.photos.length} site photo(s) attached` : '',
     `⏱️ *Logged Time:* ${dateStr}`,
@@ -55,9 +66,12 @@ export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string):
         : '';
       const displayLoc = e.location || e.locationFrom;
       const title = e.route || e.workType || 'Site Work';
+      const mats = getEntryMaterials(e);
+      const matsSummary = mats.length > 0 ? `📦 Material: ${mats.map(formatMaterialItem).join('; ')}` : '';
       return [
         `*#${idx + 1}* [${e.status === 'Rectify by Genesis' ? '🏢 Rectify by Genesis' : '🔧 Rectify by us'}] *${title}*`,
         `👷 ${e.userName}`,
+        matsSummary,
         displayLoc ? `📍 Location: ${displayLoc}` : '',
         e.latLong ? `🌐 Lat & Log: ${e.latLong}` : '',
         e.remark ? `📝 Remark: ${e.remark}` : '',
@@ -102,9 +116,12 @@ export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: s
       const photoNote = e.photos && e.photos.length > 0 ? ` [📸 ${e.photos.length} photo(s)]` : '';
       const displayLoc = e.location || e.locationFrom;
       const title = e.route || e.workType || 'Site Work';
+      const mats = getEntryMaterials(e);
+      const matsSummary = mats.length > 0 ? `   📦 *Material:* ${mats.map(formatMaterialItem).join('; ')}` : '';
       return [
         `*${idx + 1}.* [${e.status === 'Rectify by Genesis' ? '🏢 RECTIFY BY GENESIS' : '🔧 RECTIFY BY US'}] *${title}*${photoNote}`,
         e.date ? `   📅 *Work Date:* ${e.date}` : '',
+        matsSummary,
         displayLoc ? `   📍 *Location:* ${displayLoc}` : '',
         e.latLong ? `   🌐 *Lat & Log:* ${e.latLong}` : '',
         e.remark ? `   📝 *Note:* ${e.remark}` : '',

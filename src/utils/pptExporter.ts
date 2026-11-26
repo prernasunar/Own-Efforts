@@ -1,5 +1,5 @@
 import PptxGenJS from 'pptxgenjs';
-import { WorkEntry } from '../types';
+import { WorkEntry, getEntryMaterials, formatMaterialItem, computeEntryMaterialTotals } from '../types';
 import { parseEntryDateTime } from './excelExporter';
 
 export interface PptExportOptions {
@@ -254,8 +254,9 @@ function addEntrySlide(pptx: PptxGenJS, entry: WorkEntry, index: number, total: 
   const fromLoc = entry.locationFrom || entry.location || '—';
   const toLoc = entry.locationTo || '—';
   const routeDisplay = entry.route || entry.workType || '—';
-  const workTypeDisplay = entry.workType || 'Site Work';
-  const qtyDisplay = `${entry.quantity ?? 1} ${entry.uom || 'meter'}`;
+  const mats = getEntryMaterials(entry);
+  const materialMouDisplay =
+    mats.length > 0 ? mats.map(formatMaterialItem).join('  |  ') : '—';
   const gpsDisplay = entry.latLong || 'Not recorded';
   const remarkDisplay = entry.remark || 'No additional remarks provided.';
 
@@ -288,12 +289,12 @@ function addEntrySlide(pptx: PptxGenJS, entry: WorkEntry, index: number, total: 
         options: { bold: true, fill: { color: 'FFFFFF' }, color: 'B45309', fontSize: 10 },
       },
       {
-        text: 'Work Type & Qty',
+        text: 'Material & MOU',
         options: { bold: true, fill: { color: 'F5F5F4' }, color: '44403C', fontSize: 9.5 },
       },
       {
-        text: `${workTypeDisplay}  •  ${qtyDisplay}`,
-        options: { bold: true, fill: { color: 'FFFFFF' }, color: '1C1917', fontSize: 10 },
+        text: materialMouDisplay,
+        options: { bold: true, fill: { color: 'FFFFFF' }, color: '1C1917', fontSize: 9.5 },
       },
     ],
     [
@@ -369,8 +370,9 @@ export async function exportCivilWorkToPpt(
   const workerSet = new Set<string>();
 
   filtered.forEach((e) => {
-    if (e.uom === 'meter') totalMeters += Number(e.quantity) || 0;
-    else totalNos += Number(e.quantity) || 0;
+    const totals = computeEntryMaterialTotals(e);
+    totalMeters += totals.meters;
+    totalNos += totals.counts;
     if (e.status === 'Rectify by Genesis') rectifyByGenesisCount++;
     else rectifyByUsCount++;
     if (e.userName) workerSet.add(e.userName.trim());
@@ -497,12 +499,17 @@ export async function exportCivilWorkToPpt(
     filtered.slice(0, 8).forEach((entry, idx) => {
       const { dateStr } = parseEntryDateTime(entry);
       const rowFill = idx % 2 === 0 ? 'FFFFFF' : 'F5F5F4';
+      const mats = getEntryMaterials(entry);
+      const qtyCell =
+        mats.length > 0
+          ? mats.map(formatMaterialItem).join(', ').slice(0, 42)
+          : '—';
       previewRows.push([
         { text: `${idx + 1}`, options: { fill: { color: rowFill }, fontSize: 8.5, color: '44403C' } },
         { text: dateStr, options: { fill: { color: rowFill }, fontSize: 8.5, color: '1C1917' } },
         { text: entry.userName || 'Executive', options: { fill: { color: rowFill }, fontSize: 8.5, bold: true, color: '1C1917' } },
         { text: entry.route || entry.workType || 'Site Work', options: { fill: { color: rowFill }, fontSize: 8.5, color: 'B45309', bold: true } },
-        { text: `${entry.quantity ?? 1} ${entry.uom || 'm'}`, options: { fill: { color: rowFill }, fontSize: 8.5, color: '1C1917' } },
+        { text: qtyCell, options: { fill: { color: rowFill }, fontSize: 8, color: '1C1917' } },
         {
           text: entry.status,
           options: {

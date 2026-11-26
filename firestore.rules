@@ -70,12 +70,24 @@ service cloud.firestore {
     }
 
     // Entries Collection Rules
+    function isValidMaterialItem(item) {
+      return item is map &&
+             item.keys().hasAll(['material', 'mou']) &&
+             item.keys().hasOnly(['material', 'mou', 'quantity']) &&
+             item.material is string && item.material.size() <= 200 &&
+             item.mou in ['Count', 'MTR'] &&
+             (!('quantity' in item) || (item.quantity is number && item.quantity >= 0));
+    }
+
     function isValidWorkEntry(data) {
-      return data.uid is string && data.uid == request.auth.uid &&
+      return data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
              data.userName is string && data.userName.size() > 0 && data.userName.size() <= 200 &&
              (!('workType' in data) || (data.workType is string && data.workType.size() <= 500)) &&
              (!('uom' in data) || data.uom in ['meter', 'Number']) &&
              (!('quantity' in data) || (data.quantity is number && data.quantity >= 0)) &&
+             (!('material' in data) || (data.material is string && data.material.size() <= 500)) &&
+             (!('mou' in data) || data.mou in ['Count', 'MTR', '']) &&
+             (!('materials' in data) || (data.materials is list && data.materials.size() <= 30 && (data.materials.size() == 0 || isValidMaterialItem(data.materials[0])))) &&
              data.status in ['Rectify by us', 'Rectify by Genesis', 'Pending', 'Done'] &&
              (!('route' in data) || (data.route is string && data.route.size() <= 500)) &&
              (!('location' in data) || (data.location is string && data.location.size() <= 1000)) &&
@@ -95,14 +107,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       
       // Create: Field workers create entries with their own UID stamped
-      allow create: if isSignedIn() && isValidWorkEntry(incoming());
+      allow create: if isSignedIn() && incoming().uid == request.auth.uid && isValidWorkEntry(incoming());
 
       // Update: Field workers can edit their own entries, or managers can update
       allow update: if isSignedIn() &&
                     (existing().uid == request.auth.uid || isManager()) &&
                     incoming().uid == existing().uid &&
                     isValidWorkEntry(incoming()) &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'status', 'route', 'location', 'latLong', 'locationFrom', 'locationTo', 'remark', 'photos', 'date', 'updatedAt', 'createdAtDate']);
+                    incoming().diff(existing()).affectedKeys().hasOnly(['workType', 'uom', 'quantity', 'material', 'mou', 'materials', 'status', 'route', 'location', 'latLong', 'locationFrom', 'locationTo', 'remark', 'photos', 'date', 'updatedAt', 'createdAtDate']);
 
       // Delete: Field workers can delete only their own entries (Managers cannot delete workers' entries)
       allow delete: if isSignedIn() && existing().uid == request.auth.uid;

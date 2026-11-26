@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkData } from '../context/WorkDataContext';
-import { WorkEntry, EntryStatus } from '../types';
+import { WorkEntry, EntryStatus, getEntryMaterials, formatMaterialItem } from '../types';
 import {
   MapPin,
   Clock,
@@ -34,6 +34,7 @@ import {
   Presentation,
   RotateCcw,
   Wrench,
+  Package,
 } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { formatSingleEntryText, formatWorkerBatchReportText } from '../utils/share';
@@ -42,6 +43,12 @@ import { ShareModal } from './ShareModal';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
 import { EntryDetailPage } from './EntryDetailPage';
+import {
+  MaterialEntriesEditor,
+  MaterialRowDraft,
+  createEmptyMaterialRow,
+  draftsToMaterialItems,
+} from './MaterialEntriesEditor';
 import { PhotoGpsData } from '../utils/photoGpsExtractor';
 import { exportCivilWorkToExcel } from '../utils/excelExporter';
 import { exportCivilWorkToPpt } from '../utils/pptExporter';
@@ -97,6 +104,7 @@ export const FieldWorkerDashboard: React.FC = () => {
   const [remark, setRemark] = useState<string>('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [status, setStatus] = useState<EntryStatus>('Rectify by us');
+  const [materialRows, setMaterialRows] = useState<MaterialRowDraft[]>(() => [createEmptyMaterialRow('MTR')]);
 
   // Quick Date Selectors for Form
   const setTodayDate = () => setDate(getTodayIso());
@@ -206,8 +214,11 @@ export const FieldWorkerDashboard: React.FC = () => {
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!route.trim() && !location.trim() && !latLong.trim() && photos.length === 0) {
-      setFormError('Please enter at least Route, Location, Lat & Long, or take/upload a photo.');
+    const cleanMaterials = draftsToMaterialItems(materialRows);
+    const hasAnyMaterial = cleanMaterials.length > 0;
+
+    if (!route.trim() && !hasAnyMaterial && !location.trim() && !latLong.trim() && photos.length === 0) {
+      setFormError('Please enter at least Route, Material, Location, Lat & Long, or take/upload a photo.');
       return;
     }
 
@@ -215,21 +226,30 @@ export const FieldWorkerDashboard: React.FC = () => {
     setSubmitting(true);
 
     try {
+      const firstMat = cleanMaterials[0];
+      const primaryMou = firstMat?.mou || materialRows[0]?.mou || 'MTR';
+      const joinedMaterials = cleanMaterials.map((m) => m.material).filter(Boolean).join(', ');
+
       await createEntry({
         date: date || getTodayIso(),
         route: route.trim(),
+        material: joinedMaterials,
+        mou: primaryMou,
+        materials: cleanMaterials,
         location: location.trim(),
         latLong: latLong.trim(),
         locationFrom: location.trim(),
         remark: remark.trim(),
         photos,
         status,
-        workType: route.trim() || 'Site Work Log',
-        quantity: 1,
-        uom: 'meter',
+        workType: route.trim() || joinedMaterials || 'Site Work Log',
+        quantity: firstMat?.quantity !== undefined ? firstMat.quantity : 0,
+        uom: primaryMou === 'Count' ? 'Number' : 'meter',
       });
 
       setFormSuccess(true);
+      setMaterialRows([createEmptyMaterialRow('MTR')]);
+      setStatus('Rectify by us');
       setRemark('');
       setPhotos([]);
       setTimeout(() => setFormSuccess(false), 4000);
@@ -357,8 +377,15 @@ export const FieldWorkerDashboard: React.FC = () => {
       }
       if (!filterQuery.trim()) return true;
       const q = filterQuery.toLowerCase();
+      const entryMats = getEntryMaterials(entry);
+      const matchesMaterials = entryMats.some(
+        (m) => m.material.toLowerCase().includes(q) || m.mou.toLowerCase().includes(q)
+      );
       return (
         (entry.route && entry.route.toLowerCase().includes(q)) ||
+        (entry.material && entry.material.toLowerCase().includes(q)) ||
+        (entry.mou && entry.mou.toLowerCase().includes(q)) ||
+        matchesMaterials ||
         (entry.location && entry.location.toLowerCase().includes(q)) ||
         (entry.latLong && entry.latLong.toLowerCase().includes(q)) ||
         (entry.remark && entry.remark.toLowerCase().includes(q)) ||
@@ -733,7 +760,19 @@ export const FieldWorkerDashboard: React.FC = () => {
                             · {entry.date || 'Today'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-stone-600 truncate">
+                        <div className="flex items-center gap-3 text-xs text-stone-600 flex-wrap">
+                          {(() => {
+                            const mats = getEntryMaterials(entry);
+                            if (mats.length === 0) return null;
+                            return (
+                              <span className="inline-flex items-center gap-1 font-semibold text-stone-800">
+                                <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span className="truncate">
+                                  {mats.map(formatMaterialItem).join(', ')}
+                                </span>
+                              </span>
+                            );
+                          })()}
                           {(entry.location || entry.locationFrom) && (
                             <span className="inline-flex items-center gap-1 truncate">
                               <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -785,7 +824,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                     Daily Work Entry Log
                   </h3>
                   <p className="text-xs text-stone-500">
-                    Route · Location · Auto Lat & Long · Remark · Live GPS Camera
+                    Route · Material & MOU · Location · Auto Lat & Long · Live GPS Camera
                   </p>
                 </div>
               </div>
@@ -1000,7 +1039,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* 6. STATUS (Rectify by us vs Rectify by Genesis) */}
+              {/* 6. STATUS (Default: Rectify by us) */}
               <div>
                 <label className="block text-xs font-bold text-stone-800 mb-1.5">
                   Work Status
@@ -1041,6 +1080,13 @@ export const FieldWorkerDashboard: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* 7. MULTIPLE MATERIAL, MOU (Count / MTR) & OPTIONAL QUANTITY */}
+              <MaterialEntriesEditor
+                rows={materialRows}
+                onChange={setMaterialRows}
+                disabled={submitting}
+              />
 
               {/* Primary Submit Button */}
               <button
@@ -1396,8 +1442,26 @@ export const FieldWorkerDashboard: React.FC = () => {
                             {displayTitle}
                           </h4>
 
-                          {/* Clean 3-Column Details */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2 border-t border-stone-100 text-xs">
+                          {/* Clean Details Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 border-t border-stone-100 text-xs">
+                            <div>
+                              <span className="text-stone-500 block mb-0.5">Material & MOU</span>
+                              <div className="font-semibold text-stone-900 flex items-start gap-1 break-words">
+                                <Package className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="space-y-0.5 min-w-0">
+                                  {(() => {
+                                    const mats = getEntryMaterials(entry);
+                                    if (mats.length === 0) return <span>Not specified</span>;
+                                    return mats.map((m, idx) => (
+                                      <div key={idx} className="leading-snug">
+                                        {formatMaterialItem(m)}
+                                      </div>
+                                    ));
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+
                             <div>
                               <span className="text-stone-500 block mb-0.5">Site Location</span>
                               <span className="font-semibold text-stone-900 flex items-start gap-1 break-words">
@@ -1414,7 +1478,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                               </span>
                             </div>
 
-                            <div className="sm:col-span-2 lg:col-span-1">
+                            <div>
                               <span className="text-stone-500 block mb-0.5">Remarks</span>
                               <span className="text-stone-700 line-clamp-2 break-words">
                                 {entry.remark || 'No remarks'}

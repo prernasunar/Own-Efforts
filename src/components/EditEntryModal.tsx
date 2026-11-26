@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { WorkEntry, EntryStatus, WorkTypeItem } from '../types';
+import { WorkEntry, EntryStatus, WorkTypeItem, getEntryMaterials } from '../types';
 import { X, Building2, Wrench, Clock, MapPin, Loader2, Sparkles, Navigation, Calendar } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
+import {
+  MaterialEntriesEditor,
+  MaterialRowDraft,
+  materialItemsToDrafts,
+  draftsToMaterialItems,
+} from './MaterialEntriesEditor';
 import { PhotoGpsData } from '../utils/photoGpsExtractor';
 
 interface EditEntryModalProps {
@@ -35,6 +41,9 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
   const [remark, setRemark] = useState<string>(entry.remark || '');
   const [photos, setPhotos] = useState<string[]>(entry.photos || []);
   const [status, setStatus] = useState<EntryStatus>(entry.status);
+  const [materialRows, setMaterialRows] = useState<MaterialRowDraft[]>(() =>
+    materialItemsToDrafts(getEntryMaterials(entry))
+  );
 
   const [lightboxData, setLightboxData] = useState<{ index: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -82,18 +91,26 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
     setError(null);
     setSaving(true);
     try {
+      const cleanMaterials = draftsToMaterialItems(materialRows);
+      const firstMat = cleanMaterials[0];
+      const primaryMou = firstMat?.mou || materialRows[0]?.mou || 'MTR';
+      const joinedMaterials = cleanMaterials.map((m) => m.material).filter(Boolean).join(', ');
+
       await onSave(entry.id, {
         date,
         route: route.trim(),
+        material: joinedMaterials,
+        mou: primaryMou,
+        materials: cleanMaterials,
         location: location.trim(),
         latLong: latLong.trim(),
         locationFrom: location.trim(),
         remark: remark.trim(),
         photos,
         status,
-        workType: route.trim() || entry.workType || 'Site Work',
-        quantity: entry.quantity ?? 1,
-        uom: entry.uom || 'meter',
+        workType: route.trim() || joinedMaterials || entry.workType || 'Site Work',
+        quantity: firstMat?.quantity !== undefined ? firstMat.quantity : 0,
+        uom: primaryMou === 'Count' ? 'Number' : 'meter',
       });
       onClose();
     } catch (err: any) {
@@ -109,7 +126,7 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-4">
           <div>
             <h3 className="text-lg font-extrabold text-stone-900">Edit Site Work Log</h3>
-            <p className="text-xs text-stone-500">Date • Route • Location • Lat & Log • Remark • Photos</p>
+            <p className="text-xs text-stone-500">Date • Route • Material & MOU • Location • Lat & Log • Remark • Photos</p>
           </div>
           <button
             onClick={onClose}
@@ -298,6 +315,14 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* 7. Multiple Material, MOU (Count / MTR) & Optional Quantity */}
+          <MaterialEntriesEditor
+            rows={materialRows}
+            onChange={setMaterialRows}
+            disabled={saving}
+            compact
+          />
 
           {/* Buttons */}
           <div className="flex space-x-3 pt-2">

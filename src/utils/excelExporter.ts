@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { WorkEntry } from '../types';
+import { WorkEntry, getEntryMaterials, formatMaterialItem, computeEntryMaterialTotals } from '../types';
 
 export interface ExcelExportOptions {
   fileName?: string;
@@ -123,15 +123,29 @@ export function filterEntriesForExport(entries: WorkEntry[], options: ExcelExpor
  */
 function buildRowData(entry: WorkEntry, index: number) {
   const { dateStr, timeStr } = parseEntryDateTime(entry);
+  const mats = getEntryMaterials(entry);
+  const materialDetails = mats.length > 0 ? mats.map(formatMaterialItem).join('; ') : '';
+  const mouDisplay =
+    mats.length > 0
+      ? Array.from(new Set(mats.map((m) => m.mou))).join(' / ')
+      : entry.mou || (entry.uom === 'Number' ? 'Count' : 'MTR');
+  const qtyDisplay =
+    mats.length === 1 && mats[0].quantity !== undefined
+      ? mats[0].quantity
+      : mats.length > 1
+      ? mats.map((m) => (m.quantity !== undefined ? `${m.quantity} ${m.mou}` : m.mou)).join('; ')
+      : entry.quantity ?? '';
+
   return {
     'Sr No': index + 1,
     'Date': dateStr,
     'Time': timeStr,
     'Field Worker': entry.userName || 'Unknown',
     'Work Type': entry.workType,
-    'Quantity': entry.quantity,
-    'Unit (UOM)': entry.uom,
     'Status': entry.status,
+    'Material & MOU': materialDetails,
+    'Quantity': qtyDisplay,
+    'MOU': mouDisplay,
     'Route': entry.route || '',
     'Location': entry.location || entry.locationFrom || '',
     'Lat & Log': entry.latLong || '',
@@ -155,11 +169,9 @@ function computeSummary(entries: WorkEntry[]) {
   const dateBreakdown: Record<string, { totalEntries: number; rectifyByUs: number; rectifyByGenesis: number; meterQty: number; numQty: number }> = {};
 
   entries.forEach((e) => {
-    if (e.uom === 'meter') {
-      totalMeterQty += Number(e.quantity) || 0;
-    } else {
-      totalNumberQty += Number(e.quantity) || 0;
-    }
+    const totals = computeEntryMaterialTotals(e);
+    totalMeterQty += totals.meters;
+    totalNumberQty += totals.counts;
 
     if (e.status === 'Rectify by Genesis') rectifyByGenesisCount++;
     else rectifyByUsCount++;
@@ -169,7 +181,7 @@ function computeSummary(entries: WorkEntry[]) {
     if (!workTypeBreakdown[wtKey]) {
       workTypeBreakdown[wtKey] = { qty: 0, uom: e.uom || 'meter', count: 0 };
     }
-    workTypeBreakdown[wtKey].qty += Number(e.quantity) || 0;
+    workTypeBreakdown[wtKey].qty += totals.meters + totals.counts;
     workTypeBreakdown[wtKey].count += 1;
 
     // Worker breakdown
@@ -180,8 +192,8 @@ function computeSummary(entries: WorkEntry[]) {
     workerBreakdown[worker].totalEntries += 1;
     if (e.status === 'Rectify by Genesis') workerBreakdown[worker].rectifyByGenesis += 1;
     else workerBreakdown[worker].rectifyByUs += 1;
-    if (e.uom === 'meter') workerBreakdown[worker].meterQty += Number(e.quantity) || 0;
-    else workerBreakdown[worker].numQty += Number(e.quantity) || 0;
+    workerBreakdown[worker].meterQty += totals.meters;
+    workerBreakdown[worker].numQty += totals.counts;
 
     // Date breakdown
     const { dateStr } = parseEntryDateTime(e);
@@ -191,8 +203,8 @@ function computeSummary(entries: WorkEntry[]) {
     dateBreakdown[dateStr].totalEntries += 1;
     if (e.status === 'Rectify by Genesis') dateBreakdown[dateStr].rectifyByGenesis += 1;
     else dateBreakdown[dateStr].rectifyByUs += 1;
-    if (e.uom === 'meter') dateBreakdown[dateStr].meterQty += Number(e.quantity) || 0;
-    else dateBreakdown[dateStr].numQty += Number(e.quantity) || 0;
+    dateBreakdown[dateStr].meterQty += totals.meters;
+    dateBreakdown[dateStr].numQty += totals.counts;
   });
 
   return {

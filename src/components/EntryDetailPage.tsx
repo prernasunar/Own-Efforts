@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WorkEntry } from '../types';
+import { WorkEntry, getEntryMaterials } from '../types';
 import {
   ArrowLeft,
   Camera,
@@ -24,6 +24,8 @@ import {
   Presentation,
   Wrench,
   Building2,
+  Package,
+  Ruler,
 } from 'lucide-react';
 import { downloadPhoto, downloadAllPhotos } from '../utils/imageUtils';
 import { exportSingleEntryToPpt } from '../utils/pptExporter';
@@ -473,21 +475,74 @@ export const EntryDetailPage: React.FC<EntryDetailPageProps> = ({
           <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
             <div className="flex items-center space-x-2 text-xs font-semibold text-stone-500">
               <Layers className="w-4 h-4 text-amber-600" />
-              <span>Category & Status</span>
+              <span>Work Status</span>
             </div>
-            <div className="flex items-center justify-between pt-1 flex-wrap gap-2 text-sm">
-              <span className="font-bold text-stone-900">
-                {entry.workType || entry.route || 'Civil Site Work'}
-              </span>
-              <span
-                className={`font-semibold ${
-                  isGenesis ? 'text-emerald-700' : 'text-amber-700'
-                }`}
-              >
-                Status: {entry.status}
-              </span>
-            </div>
+            <p
+              className={`text-sm sm:text-base font-bold ${
+                isGenesis ? 'text-emerald-700' : 'text-amber-700'
+              }`}
+            >
+              {entry.status}
+            </p>
           </div>
+        </div>
+
+        {/* Materials, MOU & Quantity Section */}
+        <div className="p-4 sm:p-5 rounded-xl bg-stone-50 border border-stone-200 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-stone-500">
+              <Package className="w-4 h-4 text-amber-600" />
+              <span>Materials, MOU & Quantity</span>
+            </div>
+            {(() => {
+              const mats = getEntryMaterials(entry);
+              return mats.length > 0 ? (
+                <span className="text-[11px] font-mono font-bold text-stone-600 bg-white px-2 py-0.5 rounded-md border border-stone-200">
+                  {mats.length} item{mats.length > 1 ? 's' : ''}
+                </span>
+              ) : null;
+            })()}
+          </div>
+
+          {(() => {
+            const mats = getEntryMaterials(entry);
+            if (mats.length === 0) {
+              return (
+                <p className="text-sm text-stone-500">No material details recorded for this entry.</p>
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {mats.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-white border border-stone-200 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-stone-400 block">
+                        Material #{idx + 1}
+                      </span>
+                      <p className="text-sm font-bold text-stone-900 break-words">
+                        {item.material || 'Material not named'}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 font-mono text-xs font-bold">
+                        {item.quantity !== undefined && item.quantity !== null ? (
+                          <>
+                            <span>{item.quantity}</span>
+                            <span>{item.mou}</span>
+                          </>
+                        ) : (
+                          <span>{item.mou}</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Remark / Detailed Work Description */}

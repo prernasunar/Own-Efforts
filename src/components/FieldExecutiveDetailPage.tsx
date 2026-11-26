@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { WorkEntry } from '../types';
+import { WorkEntry, getEntryMaterials, formatMaterialItem } from '../types';
 import {
   ArrowLeft,
   Calendar,
@@ -19,6 +19,7 @@ import {
   Mail,
   Wrench,
   Building2,
+  Package,
 } from 'lucide-react';
 import { exportCivilWorkToExcel } from '../utils/excelExporter';
 import { exportCivilWorkToPpt } from '../utils/pptExporter';
@@ -30,6 +31,7 @@ interface FieldExecutiveDetailPageProps {
   entries: WorkEntry[];
   onBack: () => void;
   onSelectEntry: (entry: WorkEntry) => void;
+  onEditEntry?: (entry: WorkEntry) => void;
   onShareSummary: (workerName: string, filteredEntries: WorkEntry[]) => void;
   onShareEntry: (entry: WorkEntry) => void;
   onOpenLightbox: (photos: string[], index: number, title: string) => void;
@@ -102,6 +104,7 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
   entries,
   onBack,
   onSelectEntry,
+  onEditEntry,
   onShareSummary,
   onShareEntry,
   onOpenLightbox,
@@ -148,13 +151,18 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesRoute = (entry.route || '').toLowerCase().includes(q);
+        const matchesMaterial = (entry.material || '').toLowerCase().includes(q);
+        const matchesMou = (entry.mou || '').toLowerCase().includes(q);
+        const matchesMaterialsList = getEntryMaterials(entry).some(
+          (m) => m.material.toLowerCase().includes(q) || m.mou.toLowerCase().includes(q)
+        );
         const matchesType = (entry.workType || '').toLowerCase().includes(q);
         const matchesLoc =
           (entry.location || '').toLowerCase().includes(q) ||
           (entry.locationFrom || '').toLowerCase().includes(q);
         const matchesLatLong = (entry.latLong || '').toLowerCase().includes(q);
         const matchesRemark = (entry.remark || '').toLowerCase().includes(q);
-        if (!matchesRoute && !matchesType && !matchesLoc && !matchesLatLong && !matchesRemark) {
+        if (!matchesRoute && !matchesMaterial && !matchesMou && !matchesMaterialsList && !matchesType && !matchesLoc && !matchesLatLong && !matchesRemark) {
           return false;
         }
       }
@@ -564,7 +572,25 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
                       </h3>
 
                       {/* Structured Info Columns */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2.5 border-t border-stone-100 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2.5 border-t border-stone-100 text-xs">
+                        <div>
+                          <span className="text-stone-500 block mb-0.5">Material & MOU</span>
+                          <div className="font-semibold text-stone-900 flex items-start gap-1 break-words">
+                            <Package className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5 min-w-0">
+                              {(() => {
+                                const mats = getEntryMaterials(entry);
+                                if (mats.length === 0) return <span>Not specified</span>;
+                                return mats.map((m, idx) => (
+                                  <div key={idx} className="leading-snug">
+                                    {formatMaterialItem(m)}
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+
                         <div>
                           <span className="text-stone-500 block mb-0.5">Site Location</span>
                           <span className="font-semibold text-stone-900 flex items-start gap-1 break-words">
@@ -581,7 +607,7 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
                           </span>
                         </div>
 
-                        <div className="sm:col-span-2 lg:col-span-1">
+                        <div>
                           <span className="text-stone-500 block mb-0.5">Remarks / Notes</span>
                           <span className="text-stone-700 line-clamp-2 break-words">
                             {entry.remark || 'No additional remarks'}
@@ -627,6 +653,15 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
                       )}
 
                       <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto lg:ml-0">
+                        {onEditEntry && (
+                          <button
+                            type="button"
+                            onClick={() => onEditEntry(entry)}
+                            className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Edit
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => onShareEntry(entry)}

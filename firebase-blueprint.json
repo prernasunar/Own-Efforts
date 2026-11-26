@@ -92,6 +92,24 @@
           "type": "number",
           "description": "Quantity completed"
         },
+        "material": {
+          "type": "string",
+          "description": "Material used at site (e.g. HDPE Duct, Coupler, Concrete)",
+          "maxLength": 500
+        },
+        "mou": {
+          "type": "string",
+          "description": "Measurement of Unit (Count or MTR)",
+          "enum": ["Count", "MTR"]
+        },
+        "materials": {
+          "type": "array",
+          "description": "Multiple material items used at site (up to 30), each containing material name, mou (Count or MTR), and optional quantity",
+          "maxItems": 30,
+          "items": {
+            "type": "object"
+          }
+        },
         "status": {
           "type": "string",
           "description": "Status of work entry (Rectify by us or Rectify by Genesis)",

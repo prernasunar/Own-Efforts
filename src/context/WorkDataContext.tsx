@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
-import { WorkEntry, WorkTypeItem, PRESET_WORK_TYPES, EntryStatus, UOMType, UserProfile, UserRole, normalizeEntryStatus } from '../types';
+import { WorkEntry, WorkTypeItem, PRESET_WORK_TYPES, EntryStatus, UOMType, MOUType, MaterialItem, UserProfile, UserRole, normalizeEntryStatus, normalizeMOU, sanitizeMaterialItems } from '../types';
 import { supabaseDb, isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import { auth, db, isFirebaseConfigured, handleFirestoreError, OperationType } from '../lib/firebase';
 import { ensureFirestoreSafePhotos } from '../utils/imageUtils';
@@ -69,6 +69,9 @@ interface WorkDataContextType {
     workType?: string;
     uom?: UOMType;
     quantity?: number;
+    material?: string;
+    mou?: MOUType;
+    materials?: MaterialItem[];
     status: EntryStatus;
     route?: string;
     location?: string;
@@ -312,6 +315,9 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const dateHelper = parseWorkEntryDate(item.createdAt || item.createdAtDate, item.date);
                 return {
                   ...item,
+                  material: item.material || '',
+                  mou: normalizeMOU(item.mou, item.uom),
+                  materials: sanitizeMaterialItems(item.materials),
                   status: normalizeEntryStatus(item.status),
                   createdAt: { toDate: dateHelper.toDate },
                 };
@@ -352,8 +358,11 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     uid: auth.currentUser.uid,
                     userName: item.userName || userProfile?.name || 'Field Executive',
                     workType: item.workType || item.route || 'Site Work',
-                    uom: item.uom || 'meter',
+                    uom: item.uom || (item.mou === 'Count' ? 'Number' : 'meter'),
                     quantity: Number(item.quantity) || 1,
+                    material: (item.material || '').slice(0, 500),
+                    mou: normalizeMOU(item.mou, item.uom),
+                    materials: sanitizeMaterialItems(item.materials),
                     status: normalizeEntryStatus(item.status),
                     route: item.route || '',
                     location: item.location || item.locationFrom || '',
@@ -391,8 +400,11 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   uid: data.uid || '',
                   userName: data.userName || 'Field Executive',
                   workType: data.workType || data.route || 'Site Work',
-                  uom: data.uom || 'meter',
-                  quantity: Number(data.quantity) || 1,
+                  uom: data.uom || (data.mou === 'Count' ? 'Number' : 'meter'),
+                  quantity: data.quantity !== undefined ? Number(data.quantity) : 1,
+                  material: data.material || '',
+                  mou: normalizeMOU(data.mou, data.uom),
+                  materials: sanitizeMaterialItems(data.materials),
                   status: normalizeEntryStatus(data.status),
                   route: data.route || '',
                   location: data.location || data.locationFrom || '',
@@ -431,6 +443,9 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     const dateHelper = parseWorkEntryDate(item.createdAt, item.createdAtDate);
                     return {
                       ...item,
+                      material: item.material || '',
+                      mou: normalizeMOU(item.mou, item.uom),
+                      materials: sanitizeMaterialItems(item.materials),
                       status: normalizeEntryStatus(item.status),
                       createdAt: { toDate: dateHelper.toDate },
                     };
@@ -528,8 +543,11 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 uid: data.uid || '',
                 userName: data.userName || 'Field Worker',
                 workType: data.workType || data.route || 'Site Work',
-                uom: data.uom || 'meter',
-                quantity: Number(data.quantity) || 1,
+                uom: data.uom || (data.mou === 'Count' ? 'Number' : 'meter'),
+                quantity: data.quantity !== undefined ? Number(data.quantity) : 1,
+                material: data.material || '',
+                mou: normalizeMOU(data.mou, data.uom),
+                materials: sanitizeMaterialItems(data.materials),
                 status: normalizeEntryStatus(data.status),
                 route: data.route || '',
                 location: data.location || data.locationFrom || '',
@@ -591,7 +609,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               setEntries(
                 parsed.map((item: any) => {
                   const dateHelper = parseWorkEntryDate(item.createdAt, item.createdAtDate);
-                  return { ...item, status: normalizeEntryStatus(item.status), createdAt: { toDate: dateHelper.toDate } };
+                  return { ...item, material: item.material || '', mou: normalizeMOU(item.mou, item.uom), materials: sanitizeMaterialItems(item.materials), status: normalizeEntryStatus(item.status), createdAt: { toDate: dateHelper.toDate } };
                 })
               );
             } catch {
@@ -618,6 +636,9 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               const dateHelper = parseWorkEntryDate(item.createdAt, item.createdAtDate);
               return {
                 ...item,
+                material: item.material || '',
+                mou: normalizeMOU(item.mou, item.uom),
+                materials: sanitizeMaterialItems(item.materials),
                 status: normalizeEntryStatus(item.status),
                 createdAt: { toDate: dateHelper.toDate },
               };
@@ -842,6 +863,9 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     workType?: string;
     uom?: UOMType;
     quantity?: number;
+    material?: string;
+    mou?: MOUType;
+    materials?: MaterialItem[];
     status: EntryStatus;
     route?: string;
     location?: string;
@@ -877,19 +901,38 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const todayDate = new Date().toLocaleDateString('en-CA');
     const safePhotos = await ensureFirestoreSafePhotos(entryData.photos || []);
 
+    const safeMaterials = sanitizeMaterialItems(entryData.materials);
+    const firstMat = safeMaterials[0];
+    const resolvedMou = firstMat?.mou || normalizeMOU(entryData.mou, entryData.uom);
+    const resolvedUom: UOMType = entryData.uom || (resolvedMou === 'Count' ? 'Number' : 'meter');
+    const resolvedMaterialStr = (
+      safeMaterials.length > 0
+        ? safeMaterials.map((m) => m.material).filter(Boolean).join(', ')
+        : (entryData.material || '').trim()
+    ).slice(0, 500);
+    const resolvedQuantity =
+      firstMat?.quantity !== undefined
+        ? Number(firstMat.quantity)
+        : entryData.quantity !== undefined
+        ? Math.max(0, Number(entryData.quantity))
+        : 0;
+
     const payload = {
       uid,
-      userName: resolvedName,
-      workType: entryData.workType || entryData.route || 'Site Work',
-      uom: entryData.uom || 'meter',
-      quantity: entryData.quantity !== undefined ? Number(entryData.quantity) : 1,
+      userName: resolvedName.slice(0, 200),
+      workType: (entryData.workType || entryData.route || resolvedMaterialStr || 'Site Work').slice(0, 500),
+      uom: resolvedUom,
+      quantity: resolvedQuantity,
+      material: resolvedMaterialStr,
+      mou: resolvedMou,
+      materials: safeMaterials,
       status: entryData.status,
-      route: entryData.route || '',
-      location: entryData.location || entryData.locationFrom || '',
-      latLong: entryData.latLong || '',
-      locationFrom: entryData.locationFrom || entryData.location || '',
-      locationTo: entryData.locationTo || '',
-      remark: entryData.remark || '',
+      route: (entryData.route || '').slice(0, 500),
+      location: (entryData.location || entryData.locationFrom || '').slice(0, 1000),
+      latLong: (entryData.latLong || '').slice(0, 500),
+      locationFrom: (entryData.locationFrom || entryData.location || '').slice(0, 1000),
+      locationTo: (entryData.locationTo || '').slice(0, 1000),
+      remark: (entryData.remark || '').slice(0, 5000),
       photos: safePhotos,
       date: entryData.date || todayDate,
       createdAtDate: new Date().toISOString(),
@@ -944,16 +987,19 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (hasAuth && db && !id.startsWith('demo_') && !id.startsWith('entry_')) {
       try {
         const cleanPayload: any = { updatedAt: serverTimestamp() };
-        if (entryData.workType !== undefined) cleanPayload.workType = entryData.workType;
+        if (entryData.workType !== undefined) cleanPayload.workType = entryData.workType.slice(0, 500);
         if (entryData.uom !== undefined) cleanPayload.uom = entryData.uom;
-        if (entryData.quantity !== undefined) cleanPayload.quantity = Number(entryData.quantity);
+        if (entryData.quantity !== undefined) cleanPayload.quantity = Math.max(0, Number(entryData.quantity));
+        if (entryData.material !== undefined) cleanPayload.material = entryData.material.slice(0, 500);
+        if (entryData.mou !== undefined) cleanPayload.mou = entryData.mou;
+        if (entryData.materials !== undefined) cleanPayload.materials = sanitizeMaterialItems(entryData.materials);
         if (entryData.status !== undefined) cleanPayload.status = entryData.status;
-        if (entryData.route !== undefined) cleanPayload.route = entryData.route;
-        if (entryData.location !== undefined) cleanPayload.location = entryData.location;
-        if (entryData.latLong !== undefined) cleanPayload.latLong = entryData.latLong;
-        if (entryData.locationFrom !== undefined) cleanPayload.locationFrom = entryData.locationFrom;
-        if (entryData.locationTo !== undefined) cleanPayload.locationTo = entryData.locationTo;
-        if (entryData.remark !== undefined) cleanPayload.remark = entryData.remark;
+        if (entryData.route !== undefined) cleanPayload.route = entryData.route.slice(0, 500);
+        if (entryData.location !== undefined) cleanPayload.location = entryData.location.slice(0, 1000);
+        if (entryData.latLong !== undefined) cleanPayload.latLong = entryData.latLong.slice(0, 500);
+        if (entryData.locationFrom !== undefined) cleanPayload.locationFrom = entryData.locationFrom.slice(0, 1000);
+        if (entryData.locationTo !== undefined) cleanPayload.locationTo = entryData.locationTo.slice(0, 1000);
+        if (entryData.remark !== undefined) cleanPayload.remark = entryData.remark.slice(0, 5000);
         if (entryData.photos !== undefined) {
           cleanPayload.photos = await ensureFirestoreSafePhotos(entryData.photos);
         }

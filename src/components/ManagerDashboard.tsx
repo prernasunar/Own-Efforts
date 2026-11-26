@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useWorkData } from '../context/WorkDataContext';
-import { WorkEntry } from '../types';
+import { WorkEntry, getEntryMaterials, formatMaterialItem } from '../types';
 import {
   Users,
   Calendar,
@@ -21,6 +21,7 @@ import {
   Globe,
   Wrench,
   Building2,
+  Package,
 } from 'lucide-react';
 import { formatSingleEntryText, formatTeamReportText } from '../utils/share';
 import { ShareModal } from './ShareModal';
@@ -28,6 +29,7 @@ import { PhotoLightbox } from './PhotoLightbox';
 import { ExcelExportModal } from './ExcelExportModal';
 import { PptExportModal } from './PptExportModal';
 import { AddWorkerModal } from './AddWorkerModal';
+import { EditEntryModal } from './EditEntryModal';
 import { EntryDetailPage } from './EntryDetailPage';
 import { FieldExecutiveDetailPage } from './FieldExecutiveDetailPage';
 
@@ -94,11 +96,12 @@ function isEntryOnDate(entry: WorkEntry, dateStr: string): boolean {
 }
 
 export const ManagerDashboard: React.FC = () => {
-  const { entries, teamWorkers, addWorker, removeWorker, refreshData } = useWorkData();
+  const { entries, teamWorkers, workTypes, addWorker, removeWorker, updateEntry, refreshData } = useWorkData();
 
   // Dedicated Page Navigation States
   const [selectedExecutivePage, setSelectedExecutivePage] = useState<string | null>(null);
   const [selectedEntryForDetail, setSelectedEntryForDetail] = useState<WorkEntry | null>(null);
+  const [editingEntry, setEditingEntry] = useState<WorkEntry | null>(null);
 
   // Filter States for Main Logs Feed
   const [selectedWorker, setSelectedWorker] = useState<string>('ALL');
@@ -218,6 +221,11 @@ export const ManagerDashboard: React.FC = () => {
         const q = searchQuery.toLowerCase();
         const matchesType = (entry.workType || '').toLowerCase().includes(q);
         const matchesRoute = (entry.route || '').toLowerCase().includes(q);
+        const matchesMaterial = (entry.material || '').toLowerCase().includes(q);
+        const matchesMou = (entry.mou || '').toLowerCase().includes(q);
+        const matchesMaterialsList = getEntryMaterials(entry).some(
+          (m) => m.material.toLowerCase().includes(q) || m.mou.toLowerCase().includes(q)
+        );
         const matchesWorker = (entry.userName || '').toLowerCase().includes(q);
         const matchesLoc =
           (entry.location || '').toLowerCase().includes(q) ||
@@ -225,7 +233,7 @@ export const ManagerDashboard: React.FC = () => {
           (entry.locationTo || '').toLowerCase().includes(q);
         const matchesRemark = (entry.remark || '').toLowerCase().includes(q);
 
-        if (!matchesType && !matchesRoute && !matchesWorker && !matchesLoc && !matchesRemark) {
+        if (!matchesType && !matchesRoute && !matchesMaterial && !matchesMou && !matchesMaterialsList && !matchesWorker && !matchesLoc && !matchesRemark) {
           return false;
         }
       }
@@ -309,11 +317,24 @@ export const ManagerDashboard: React.FC = () => {
           entry={activeDetailEntry}
           onBack={() => setSelectedEntryForDetail(null)}
           onShare={(entry) => handleShareSingle(entry)}
+          onEdit={(entry) => setEditingEntry(entry)}
           onFilterByWorker={(workerName) => {
             setSelectedEntryForDetail(null);
             setSelectedExecutivePage(workerName);
           }}
         />
+        {editingEntry && (
+          <EditEntryModal
+            entry={editingEntry}
+            workTypes={workTypes}
+            isOpen={Boolean(editingEntry)}
+            onClose={() => setEditingEntry(null)}
+            onSave={async (id, data) => {
+              await updateEntry(id, data);
+              setEditingEntry(null);
+            }}
+          />
+        )}
         {shareData && (
           <ShareModal
             isOpen={Boolean(shareData)}
@@ -342,11 +363,24 @@ export const ManagerDashboard: React.FC = () => {
           entries={entries}
           onBack={() => setSelectedExecutivePage(null)}
           onSelectEntry={(entry) => setSelectedEntryForDetail(entry)}
+          onEditEntry={(entry) => setEditingEntry(entry)}
           onShareSummary={(name, list) => handleShareWorkerSummary(name, list)}
           onShareEntry={(entry) => handleShareSingle(entry)}
           onOpenLightbox={(photos, index, title) => setLightboxData({ photos, index, title })}
           onRemoveExecutive={(name, uid) => handleRemoveExecutive(null, name, uid)}
         />
+        {editingEntry && (
+          <EditEntryModal
+            entry={editingEntry}
+            workTypes={workTypes}
+            isOpen={Boolean(editingEntry)}
+            onClose={() => setEditingEntry(null)}
+            onSave={async (id, data) => {
+              await updateEntry(id, data);
+              setEditingEntry(null);
+            }}
+          />
+        )}
         {shareData && (
           <ShareModal
             isOpen={Boolean(shareData)}
@@ -822,8 +856,26 @@ export const ManagerDashboard: React.FC = () => {
                         {entry.route || entry.workType || 'Site Work Log'}
                       </h4>
 
-                      {/* Clean 3-Column Details Row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2.5 border-t border-stone-100 text-xs">
+                      {/* Clean 4-Column Details Row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2.5 border-t border-stone-100 text-xs">
+                        <div>
+                          <span className="text-stone-500 block mb-0.5">Material & MOU</span>
+                          <div className="font-semibold text-stone-900 flex items-start gap-1 break-words">
+                            <Package className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5 min-w-0">
+                              {(() => {
+                                const mats = getEntryMaterials(entry);
+                                if (mats.length === 0) return <span>Not specified</span>;
+                                return mats.map((m, idx) => (
+                                  <div key={idx} className="leading-snug">
+                                    {formatMaterialItem(m)}
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+
                         <div>
                           <span className="text-stone-500 block mb-0.5">Site Location</span>
                           <span className="font-semibold text-stone-900 flex items-start gap-1 break-words">
@@ -840,7 +892,7 @@ export const ManagerDashboard: React.FC = () => {
                           </span>
                         </div>
 
-                        <div className="sm:col-span-2 lg:col-span-1">
+                        <div>
                           <span className="text-stone-500 block mb-0.5">Remarks</span>
                           <span className="text-stone-700 line-clamp-2 break-words">
                             {entry.remark || 'No additional remarks'}
@@ -886,6 +938,14 @@ export const ManagerDashboard: React.FC = () => {
                       )}
 
                       <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto lg:ml-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingEntry(entry)}
+                          className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                        >
+                          Edit
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => handleShareSingle(entry)}
@@ -963,6 +1023,20 @@ export const ManagerDashboard: React.FC = () => {
           await addWorker(worker);
         }}
       />
+
+      {/* Edit Existing Entry Modal */}
+      {editingEntry && (
+        <EditEntryModal
+          entry={editingEntry}
+          workTypes={workTypes}
+          isOpen={Boolean(editingEntry)}
+          onClose={() => setEditingEntry(null)}
+          onSave={async (id, data) => {
+            await updateEntry(id, data);
+            setEditingEntry(null);
+          }}
+        />
+      )}
     </div>
   );
 };
