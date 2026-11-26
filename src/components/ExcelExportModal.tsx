@@ -47,7 +47,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   );
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Done'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Rectify by us' | 'Rectify by Genesis'>('ALL');
   const [groupBy, setGroupBy] = useState<'multi_tab_master' | 'worker' | 'date' | 'none'>(
     'multi_tab_master'
   );
@@ -86,15 +86,15 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const summaryStats = useMemo(() => {
     let meters = 0;
     let nos = 0;
-    let done = 0;
-    let pending = 0;
+    let rectifyByUs = 0;
+    let rectifyByGenesis = 0;
     const workers = new Set<string>();
 
     matchingEntries.forEach((e) => {
       if (e.uom === 'meter') meters += Number(e.quantity) || 0;
       else nos += Number(e.quantity) || 0;
-      if (e.status === 'Done') done++;
-      else pending++;
+      if (e.status === 'Rectify by Genesis') rectifyByGenesis++;
+      else rectifyByUs++;
       if (e.userName) workers.add(e.userName);
     });
 
@@ -102,8 +102,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       count: matchingEntries.length,
       meters,
       nos,
-      done,
-      pending,
+      rectifyByUs,
+      rectifyByGenesis,
       workerCount: workers.size,
     };
   }, [matchingEntries]);
@@ -314,8 +314,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'ALL', label: 'All Statuses' },
-                { id: 'Done', label: 'Done Only (Complete)' },
-                { id: 'Pending', label: 'Pending Only' },
+                { id: 'Rectify by us', label: 'Rectify by us' },
+                { id: 'Rectify by Genesis', label: 'Rectify by Genesis' },
               ].map((st) => (
                 <button
                   key={st.id}
@@ -412,7 +412,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               <div className="bg-stone-800/80 p-2 rounded-lg">
                 <span className="text-[10px] text-stone-400 uppercase block">Status Breakdown</span>
                 <span className="text-xs font-bold text-emerald-400">
-                  {summaryStats.done} Done • {summaryStats.pending} Pend
+                  {summaryStats.rectifyByUs} Us • {summaryStats.rectifyByGenesis} Genesis
                 </span>
               </div>
               <div className="bg-stone-800/80 p-2 rounded-lg">

@@ -76,7 +76,7 @@ service cloud.firestore {
              (!('workType' in data) || (data.workType is string && data.workType.size() <= 500)) &&
              (!('uom' in data) || data.uom in ['meter', 'Number']) &&
              (!('quantity' in data) || (data.quantity is number && data.quantity >= 0)) &&
-             data.status in ['Pending', 'Done'] &&
+             data.status in ['Rectify by us', 'Rectify by Genesis', 'Pending', 'Done'] &&
              (!('route' in data) || (data.route is string && data.route.size() <= 500)) &&
              (!('location' in data) || (data.location is string && data.location.size() <= 1000)) &&
              (!('latLong' in data) || (data.latLong is string && data.latLong.size() <= 500)) &&

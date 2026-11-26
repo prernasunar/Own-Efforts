@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS public.work_entries (
   work_type TEXT NOT NULL,
   uom TEXT NOT NULL CHECK (uom IN ('meter', 'Number')),
   quantity NUMERIC NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('Pending', 'Done')),
+  status TEXT NOT NULL CHECK (status IN ('Rectify by us', 'Rectify by Genesis', 'Pending', 'Done')),
   location_from TEXT NOT NULL,
   location_to TEXT NOT NULL,
   remark TEXT,

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
-import { WorkEntry, WorkTypeItem, PRESET_WORK_TYPES, EntryStatus, UOMType, UserProfile, UserRole } from '../types';
+import { WorkEntry, WorkTypeItem, PRESET_WORK_TYPES, EntryStatus, UOMType, UserProfile, UserRole, normalizeEntryStatus } from '../types';
 import { supabaseDb, isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import { auth, db, isFirebaseConfigured, handleFirestoreError, OperationType } from '../lib/firebase';
 import { ensureFirestoreSafePhotos } from '../utils/imageUtils';
@@ -120,7 +120,7 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     workType: 'Trenching',
     uom: 'meter',
     quantity: 145,
-    status: 'Done',
+    status: 'Rectify by Genesis',
     route: 'Sector 14 Junction Route',
     location: 'Sector 14 Junction, North Road',
     locationFrom: 'Sector 14 Junction, North Road',
@@ -136,7 +136,7 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     workType: 'Duct Laying',
     uom: 'meter',
     quantity: 90,
-    status: 'Pending',
+    status: 'Rectify by us',
     route: 'Station Road OFC Backbone',
     location: 'Manhole MH-42 (Station Road)',
     locationFrom: 'Manhole MH-42 (Station Road)',
@@ -152,7 +152,7 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     workType: 'New HH',
     uom: 'Number',
     quantity: 2,
-    status: 'Done',
+    status: 'Rectify by Genesis',
     route: 'Crossroad Sector 9 Route',
     location: 'Crossroad Sector 9',
     locationFrom: 'Crossroad Sector 9',
@@ -168,7 +168,7 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     workType: 'Cable Blowing',
     uom: 'meter',
     quantity: 320,
-    status: 'Done',
+    status: 'Rectify by Genesis',
     route: 'Feeder Point FP-03 Line',
     location: 'Feeder Point FP-03',
     locationFrom: 'Feeder Point FP-03',
@@ -184,7 +184,7 @@ const INITIAL_DEMO_ENTRIES: WorkEntry[] = [
     workType: 'Cable pulling',
     uom: 'meter',
     quantity: 210,
-    status: 'Done',
+    status: 'Rectify by us',
     route: 'Node Alpha-1 Section',
     location: 'Node Alpha-1',
     locationFrom: 'Node Alpha-1',
@@ -312,6 +312,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const dateHelper = parseWorkEntryDate(item.createdAt || item.createdAtDate, item.date);
                 return {
                   ...item,
+                  status: normalizeEntryStatus(item.status),
                   createdAt: { toDate: dateHelper.toDate },
                 };
               })
@@ -353,7 +354,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     workType: item.workType || item.route || 'Site Work',
                     uom: item.uom || 'meter',
                     quantity: Number(item.quantity) || 1,
-                    status: (item.status as EntryStatus) || 'Done',
+                    status: normalizeEntryStatus(item.status),
                     route: item.route || '',
                     location: item.location || item.locationFrom || '',
                     latLong: item.latLong || '',
@@ -392,7 +393,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   workType: data.workType || data.route || 'Site Work',
                   uom: data.uom || 'meter',
                   quantity: Number(data.quantity) || 1,
-                  status: (data.status as EntryStatus) || 'Done',
+                  status: normalizeEntryStatus(data.status),
                   route: data.route || '',
                   location: data.location || data.locationFrom || '',
                   latLong: data.latLong || '',
@@ -430,6 +431,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     const dateHelper = parseWorkEntryDate(item.createdAt, item.createdAtDate);
                     return {
                       ...item,
+                      status: normalizeEntryStatus(item.status),
                       createdAt: { toDate: dateHelper.toDate },
                     };
                   })
@@ -528,7 +530,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 workType: data.workType || data.route || 'Site Work',
                 uom: data.uom || 'meter',
                 quantity: Number(data.quantity) || 1,
-                status: (data.status as EntryStatus) || 'Done',
+                status: normalizeEntryStatus(data.status),
                 route: data.route || '',
                 location: data.location || data.locationFrom || '',
                 latLong: data.latLong || '',
@@ -589,7 +591,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               setEntries(
                 parsed.map((item: any) => {
                   const dateHelper = parseWorkEntryDate(item.createdAt, item.createdAtDate);
-                  return { ...item, createdAt: { toDate: dateHelper.toDate } };
+                  return { ...item, status: normalizeEntryStatus(item.status), createdAt: { toDate: dateHelper.toDate } };
                 })
               );
             } catch {
@@ -616,6 +618,7 @@ export const WorkDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               const dateHelper = parseWorkEntryDate(item.createdAt, item.createdAtDate);
               return {
                 ...item,
+                status: normalizeEntryStatus(item.status),
                 createdAt: { toDate: dateHelper.toDate },
               };
             })

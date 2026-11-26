@@ -19,7 +19,7 @@ export function formatSingleEntryText(entry: WorkEntry): string {
     `🛣️ *Route:* ${primaryTitle}`,
     displayLoc ? `📍 *Location:* ${displayLoc}` : '',
     entry.latLong ? `🌐 *Lat & Log:* ${entry.latLong}` : '',
-    `🚦 *Status:* ${entry.status === 'Done' ? '✅ Done' : '⏳ Pending'}`,
+    `🚦 *Status:* ${entry.status === 'Rectify by Genesis' ? '🏢 Rectify by Genesis' : '🔧 Rectify by us'}`,
     entry.remark ? `📝 *Remark:* ${entry.remark}` : '',
     entry.photos && entry.photos.length > 0 ? `📸 *Photos:* ${entry.photos.length} site photo(s) attached` : '',
     `⏱️ *Logged Time:* ${dateStr}`,
@@ -32,14 +32,14 @@ export function formatSingleEntryText(entry: WorkEntry): string {
 export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string): string {
   const now = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   const total = entries.length;
-  const doneCount = entries.filter((e) => e.status === 'Done').length;
-  const pendingCount = entries.filter((e) => e.status === 'Pending').length;
+  const rectifyByUsCount = entries.filter((e) => e.status === 'Rectify by us').length;
+  const rectifyByGenesisCount = entries.filter((e) => e.status === 'Rectify by Genesis').length;
 
   const header = [
     `📋 *CIVIL SITE TEAM DAILY REPORT*`,
     `📅 *Date:* ${now}`,
     filterInfo ? `🔍 *Filter:* ${filterInfo}` : '',
-    `📊 *Summary:* Total ${total} | ✅ Done: ${doneCount} | ⏳ Pending: ${pendingCount}`,
+    `📊 *Summary:* Total ${total} | 🔧 Rectify by us: ${rectifyByUsCount} | 🏢 Rectify by Genesis: ${rectifyByGenesisCount}`,
     `━━━━━━━━━━━━━━━━━━━━`,
     '',
   ].filter(Boolean).join('\n');
@@ -56,7 +56,7 @@ export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string):
       const displayLoc = e.location || e.locationFrom;
       const title = e.route || e.workType || 'Site Work';
       return [
-        `*#${idx + 1}* [${e.status === 'Done' ? '✅ Done' : '⏳ Pending'}] *${title}*`,
+        `*#${idx + 1}* [${e.status === 'Rectify by Genesis' ? '🏢 Rectify by Genesis' : '🔧 Rectify by us'}] *${title}*`,
         `👷 ${e.userName}`,
         displayLoc ? `📍 Location: ${displayLoc}` : '',
         e.latLong ? `🌐 Lat & Log: ${e.latLong}` : '',
@@ -74,8 +74,8 @@ export function formatTeamReportText(entries: WorkEntry[], filterInfo?: string):
 export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: string): string {
   const now = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   const total = entries.length;
-  const doneCount = entries.filter((e) => e.status === 'Done').length;
-  const pendingCount = entries.filter((e) => e.status === 'Pending').length;
+  const rectifyByUsCount = entries.filter((e) => e.status === 'Rectify by us').length;
+  const rectifyByGenesisCount = entries.filter((e) => e.status === 'Rectify by Genesis').length;
   const totalPhotos = entries.reduce((sum, e) => sum + (e.photos?.length || 0), 0);
   const worker = workerName || entries[0]?.userName || 'Field Worker';
 
@@ -84,7 +84,7 @@ export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: s
     `━━━━━━━━━━━━━━━━━━━━`,
     `👷 *Logged By:* ${worker}`,
     `📅 *Date:* ${now}`,
-    `📊 *Total Works Selected:* ${total} (✅ ${doneCount} Done | ⏳ ${pendingCount} Pending)`,
+    `📊 *Total Works Selected:* ${total} (🔧 ${rectifyByUsCount} Rectify by us | 🏢 ${rectifyByGenesisCount} Rectify by Genesis)`,
     totalPhotos > 0 ? `📸 *Total Attached Photos:* ${totalPhotos}` : '',
     `━━━━━━━━━━━━━━━━━━━━`,
     '',
@@ -103,7 +103,7 @@ export function formatWorkerBatchReportText(entries: WorkEntry[], workerName?: s
       const displayLoc = e.location || e.locationFrom;
       const title = e.route || e.workType || 'Site Work';
       return [
-        `*${idx + 1}.* [${e.status === 'Done' ? '✅ DONE' : '⏳ PENDING'}] *${title}*${photoNote}`,
+        `*${idx + 1}.* [${e.status === 'Rectify by Genesis' ? '🏢 RECTIFY BY GENESIS' : '🔧 RECTIFY BY US'}] *${title}*${photoNote}`,
         e.date ? `   📅 *Work Date:* ${e.date}` : '',
         displayLoc ? `   📍 *Location:* ${displayLoc}` : '',
         e.latLong ? `   🌐 *Lat & Log:* ${e.latLong}` : '',

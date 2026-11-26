@@ -33,6 +33,7 @@ import {
   FileSpreadsheet,
   Presentation,
   RotateCcw,
+  Wrench,
 } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { formatSingleEntryText, formatWorkerBatchReportText } from '../utils/share';
@@ -95,7 +96,7 @@ export const FieldWorkerDashboard: React.FC = () => {
   const [latLong, setLatLong] = useState<string>('');
   const [remark, setRemark] = useState<string>('');
   const [photos, setPhotos] = useState<string[]>([]);
-  const [status, setStatus] = useState<EntryStatus>('Done');
+  const [status, setStatus] = useState<EntryStatus>('Rectify by us');
 
   // Quick Date Selectors for Form
   const setTodayDate = () => setDate(getTodayIso());
@@ -123,7 +124,7 @@ export const FieldWorkerDashboard: React.FC = () => {
 
   // Filter & Search state for Past Site Logs Page
   const [filterQuery, setFilterQuery] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'Pending' | 'Done'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'Rectify by us' | 'Rectify by Genesis'>('ALL');
   const [filterDateType, setFilterDateType] = useState<'ALL' | 'TODAY' | 'CUSTOM'>('ALL');
   const [filterCustomDate, setFilterCustomDate] = useState<string>(getTodayIso);
 
@@ -155,10 +156,10 @@ export const FieldWorkerDashboard: React.FC = () => {
     const total = myEntries.length;
     const todayEntries = myEntries.filter(isEntryToday);
     const today = todayEntries.length;
-    const done = myEntries.filter((e) => e.status === 'Done').length;
-    const pending = myEntries.filter((e) => e.status === 'Pending').length;
+    const rectifyByUs = myEntries.filter((e) => e.status === 'Rectify by us').length;
+    const rectifyByGenesis = myEntries.filter((e) => e.status === 'Rectify by Genesis').length;
     const totalPhotos = myEntries.reduce((sum, e) => sum + (e.photos?.length || 0), 0);
-    return { total, today, done, pending, totalPhotos, todayEntries };
+    return { total, today, rectifyByUs, rectifyByGenesis, totalPhotos, todayEntries };
   }, [myEntries]);
 
   // Live GPS Capture button for the Location field
@@ -566,17 +567,17 @@ export const FieldWorkerDashboard: React.FC = () => {
               type="button"
               onClick={() => {
                 setFilterDateType('ALL');
-                setFilterStatus('Done');
+                setFilterStatus('Rectify by us');
                 setActivePage('SITE_LOGS');
               }}
-              className="bg-white p-4 rounded-2xl border border-stone-200 hover:border-emerald-500 text-left transition-colors cursor-pointer"
+              className="bg-white p-4 rounded-2xl border border-stone-200 hover:border-amber-500 text-left transition-colors cursor-pointer"
             >
-              <span className="text-xs font-medium text-emerald-700 block">Completed (Done)</span>
-              <span className="text-2xl sm:text-3xl font-bold text-emerald-700 font-mono tabular-nums mt-1 block">
-                {dashboardStats.done}
+              <span className="text-xs font-medium text-amber-700 block">Rectify by us</span>
+              <span className="text-2xl sm:text-3xl font-bold text-amber-700 font-mono tabular-nums mt-1 block">
+                {dashboardStats.rectifyByUs}
               </span>
               <span className="text-[11px] text-stone-500 mt-1 block truncate">
-                Verified site tasks
+                Site team rectification
               </span>
             </button>
 
@@ -584,17 +585,17 @@ export const FieldWorkerDashboard: React.FC = () => {
               type="button"
               onClick={() => {
                 setFilterDateType('ALL');
-                setFilterStatus('Pending');
+                setFilterStatus('Rectify by Genesis');
                 setActivePage('SITE_LOGS');
               }}
-              className="bg-white p-4 rounded-2xl border border-stone-200 hover:border-amber-500 text-left transition-colors cursor-pointer"
+              className="bg-white p-4 rounded-2xl border border-stone-200 hover:border-emerald-500 text-left transition-colors cursor-pointer"
             >
-              <span className="text-xs font-medium text-amber-700 block">Pending Work</span>
-              <span className="text-2xl sm:text-3xl font-bold text-amber-700 font-mono tabular-nums mt-1 block">
-                {dashboardStats.pending}
+              <span className="text-xs font-medium text-emerald-700 block">Rectify by Genesis</span>
+              <span className="text-2xl sm:text-3xl font-bold text-emerald-700 font-mono tabular-nums mt-1 block">
+                {dashboardStats.rectifyByGenesis}
               </span>
               <span className="text-[11px] text-stone-500 mt-1 block truncate">
-                In-progress tasks
+                Genesis rectification
               </span>
             </button>
           </div>
@@ -706,7 +707,7 @@ export const FieldWorkerDashboard: React.FC = () => {
             ) : (
               <div className="space-y-2.5">
                 {myEntries.slice(0, 4).map((entry) => {
-                  const isDone = entry.status === 'Done';
+                  const isGenesis = entry.status === 'Rectify by Genesis';
                   const entryPhotos = entry.photos || [];
                   const displayTitle = entry.route || entry.workType || 'Site Work Log';
 
@@ -723,10 +724,10 @@ export const FieldWorkerDashboard: React.FC = () => {
                           </span>
                           <span
                             className={`font-semibold ${
-                              isDone ? 'text-emerald-700' : 'text-amber-700'
+                              isGenesis ? 'text-emerald-700' : 'text-amber-700'
                             }`}
                           >
-                            {isDone ? '· Done' : '· Pending'}
+                            {isGenesis ? '· Rectify by Genesis' : '· Rectify by us'}
                           </span>
                           <span className="text-stone-400 font-mono text-[11px]">
                             · {entry.date || 'Today'}
@@ -999,7 +1000,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* 6. STATUS (Pending vs Done) */}
+              {/* 6. STATUS (Rectify by us vs Rectify by Genesis) */}
               <div>
                 <label className="block text-xs font-bold text-stone-800 mb-1.5">
                   Work Status
@@ -1007,36 +1008,36 @@ export const FieldWorkerDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setStatus('Pending')}
+                    onClick={() => setStatus('Rectify by us')}
                     className={`min-h-[48px] py-3 px-3 rounded-xl border-2 font-bold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer ${
-                      status === 'Pending'
+                      status === 'Rectify by us'
                         ? 'border-amber-500 bg-amber-50 text-amber-950'
                         : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
                     }`}
                   >
-                    <Clock
-                      className={`w-4 h-4 ${
-                        status === 'Pending' ? 'text-amber-600' : 'text-stone-400'
+                    <Wrench
+                      className={`w-4 h-4 shrink-0 ${
+                        status === 'Rectify by us' ? 'text-amber-600' : 'text-stone-400'
                       }`}
                     />
-                    <span>Pending</span>
+                    <span>Rectify by us</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setStatus('Done')}
+                    onClick={() => setStatus('Rectify by Genesis')}
                     className={`min-h-[48px] py-3 px-3 rounded-xl border-2 font-bold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer ${
-                      status === 'Done'
+                      status === 'Rectify by Genesis'
                         ? 'border-emerald-600 bg-emerald-50 text-emerald-950'
                         : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
                     }`}
                   >
-                    <CheckCircle2
-                      className={`w-4 h-4 ${
-                        status === 'Done' ? 'text-emerald-600' : 'text-stone-400'
+                    <Building2
+                      className={`w-4 h-4 shrink-0 ${
+                        status === 'Rectify by Genesis' ? 'text-emerald-600' : 'text-stone-400'
                       }`}
                     />
-                    <span>Done</span>
+                    <span>Rectify by Genesis</span>
                   </button>
                 </div>
               </div>
@@ -1180,7 +1181,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFilterStatus('ALL')}
-                      className={`flex-1 lg:flex-initial min-h-[32px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`flex-1 lg:flex-initial min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
                         filterStatus === 'ALL'
                           ? 'bg-white text-stone-900 shadow-2xs'
                           : 'text-stone-600 hover:text-stone-900'
@@ -1190,25 +1191,25 @@ export const FieldWorkerDashboard: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setFilterStatus('Done')}
-                      className={`flex-1 lg:flex-initial min-h-[32px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        filterStatus === 'Done'
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'text-stone-600 hover:text-stone-900'
-                      }`}
-                    >
-                      Done
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterStatus('Pending')}
-                      className={`flex-1 lg:flex-initial min-h-[32px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        filterStatus === 'Pending'
+                      onClick={() => setFilterStatus('Rectify by us')}
+                      className={`flex-1 lg:flex-initial min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                        filterStatus === 'Rectify by us'
                           ? 'bg-amber-600 text-white shadow-2xs'
                           : 'text-stone-600 hover:text-stone-900'
                       }`}
                     >
-                      Pending
+                      Rectify by us
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterStatus('Rectify by Genesis')}
+                      className={`flex-1 lg:flex-initial min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                        filterStatus === 'Rectify by Genesis'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-900'
+                      }`}
+                    >
+                      Rectify by Genesis
                     </button>
                   </div>
 
@@ -1321,7 +1322,7 @@ export const FieldWorkerDashboard: React.FC = () => {
                     })
                   : 'Just now';
 
-                const isDone = entry.status === 'Done';
+                const isGenesis = entry.status === 'Rectify by Genesis';
                 const isSelected = selectedEntryIds.includes(entry.id);
                 const displayTitle = entry.route || entry.workType || 'Site Work Log';
                 const entryPhotos = entry.photos || [];
@@ -1365,18 +1366,18 @@ export const FieldWorkerDashboard: React.FC = () => {
                             <span aria-hidden="true" className="text-stone-300">·</span>
                             <span
                               className={`inline-flex items-center gap-1 font-semibold ${
-                                isDone ? 'text-emerald-700' : 'text-amber-700'
+                                isGenesis ? 'text-emerald-700' : 'text-amber-700'
                               }`}
                             >
-                              {isDone ? (
+                              {isGenesis ? (
                                 <>
-                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                  <span>Done</span>
+                                  <Building2 className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Rectify by Genesis</span>
                                 </>
                               ) : (
                                 <>
-                                  <Clock className="w-3.5 h-3.5 shrink-0" />
-                                  <span>Pending</span>
+                                  <Wrench className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Rectify by us</span>
                                 </>
                               )}
                             </span>

@@ -94,8 +94,8 @@
         },
         "status": {
           "type": "string",
-          "description": "Status of work entry",
-          "enum": ["Pending", "Done"]
+          "description": "Status of work entry (Rectify by us or Rectify by Genesis)",
+          "enum": ["Rectify by us", "Rectify by Genesis", "Pending", "Done"]
         },
         "route": {
           "type": "string",

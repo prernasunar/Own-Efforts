@@ -52,7 +52,7 @@ export const PptExportModal: React.FC<PptExportModalProps> = ({
     new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   );
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Done'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Rectify by us' | 'Rectify by Genesis'>('ALL');
   const [includeSummarySlide, setIncludeSummarySlide] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
@@ -106,16 +106,16 @@ export const PptExportModal: React.FC<PptExportModalProps> = ({
   const summaryStats = useMemo(() => {
     let meters = 0;
     let nos = 0;
-    let done = 0;
-    let pending = 0;
+    let rectifyByUs = 0;
+    let rectifyByGenesis = 0;
     let photosCount = 0;
     const workers = new Set<string>();
 
     matchingEntries.forEach((e) => {
       if (e.uom === 'meter') meters += Number(e.quantity) || 0;
       else nos += Number(e.quantity) || 0;
-      if (e.status === 'Done') done++;
-      else pending++;
+      if (e.status === 'Rectify by Genesis') rectifyByGenesis++;
+      else rectifyByUs++;
       photosCount += (e.photos || []).length;
       if (e.userName) workers.add(e.userName.trim().toLowerCase());
     });
@@ -124,8 +124,8 @@ export const PptExportModal: React.FC<PptExportModalProps> = ({
       count: matchingEntries.length,
       meters,
       nos,
-      done,
-      pending,
+      rectifyByUs,
+      rectifyByGenesis,
       photosCount,
       workerCount: workers.size,
       totalSlides: matchingEntries.length + (includeSummarySlide ? 1 : 0),
@@ -297,12 +297,12 @@ export const PptExportModal: React.FC<PptExportModalProps> = ({
               </div>
 
               <div className="flex items-center space-x-1.5">
-                {(['ALL', 'Done', 'Pending'] as const).map((st) => (
+                {(['ALL', 'Rectify by us', 'Rectify by Genesis'] as const).map((st) => (
                   <button
                     key={st}
                     type="button"
                     onClick={() => setStatusFilter(st)}
-                    className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    className={`flex-1 py-2.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
                       statusFilter === st
                         ? 'bg-stone-900 text-white border-stone-900'
                         : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
@@ -371,10 +371,10 @@ export const PptExportModal: React.FC<PptExportModalProps> = ({
               </div>
               <div className="bg-stone-800/90 p-2.5 rounded-xl border border-stone-700">
                 <span className="text-[10px] text-stone-400 font-bold uppercase block">
-                  Done / Pending
+                  Us / Genesis
                 </span>
                 <span className="text-sm font-black text-stone-200 mt-1 block">
-                  {summaryStats.done} Done • {summaryStats.pending} Pend
+                  {summaryStats.rectifyByUs} Us • {summaryStats.rectifyByGenesis} Genesis
                 </span>
               </div>
             </div>

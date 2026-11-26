@@ -8,7 +8,7 @@ export interface ExcelExportOptions {
   customDate?: string; // YYYY-MM-DD
   startDate?: string;  // YYYY-MM-DD
   endDate?: string;    // YYYY-MM-DD
-  statusFilter?: 'ALL' | 'Pending' | 'Done';
+  statusFilter?: 'ALL' | 'Rectify by us' | 'Rectify by Genesis';
   groupBy?: 'none' | 'worker' | 'date' | 'multi_tab_master';
 }
 
@@ -147,12 +147,12 @@ function buildRowData(entry: WorkEntry, index: number) {
 function computeSummary(entries: WorkEntry[]) {
   let totalMeterQty = 0;
   let totalNumberQty = 0;
-  let doneCount = 0;
-  let pendingCount = 0;
+  let rectifyByUsCount = 0;
+  let rectifyByGenesisCount = 0;
 
   const workTypeBreakdown: Record<string, { qty: number; uom: string; count: number }> = {};
-  const workerBreakdown: Record<string, { totalEntries: number; done: number; pending: number; meterQty: number; numQty: number }> = {};
-  const dateBreakdown: Record<string, { totalEntries: number; done: number; pending: number; meterQty: number; numQty: number }> = {};
+  const workerBreakdown: Record<string, { totalEntries: number; rectifyByUs: number; rectifyByGenesis: number; meterQty: number; numQty: number }> = {};
+  const dateBreakdown: Record<string, { totalEntries: number; rectifyByUs: number; rectifyByGenesis: number; meterQty: number; numQty: number }> = {};
 
   entries.forEach((e) => {
     if (e.uom === 'meter') {
@@ -161,35 +161,36 @@ function computeSummary(entries: WorkEntry[]) {
       totalNumberQty += Number(e.quantity) || 0;
     }
 
-    if (e.status === 'Done') doneCount++;
-    else pendingCount++;
+    if (e.status === 'Rectify by Genesis') rectifyByGenesisCount++;
+    else rectifyByUsCount++;
 
     // Work type
-    if (!workTypeBreakdown[e.workType]) {
-      workTypeBreakdown[e.workType] = { qty: 0, uom: e.uom, count: 0 };
+    const wtKey = e.workType || 'Site Work';
+    if (!workTypeBreakdown[wtKey]) {
+      workTypeBreakdown[wtKey] = { qty: 0, uom: e.uom || 'meter', count: 0 };
     }
-    workTypeBreakdown[e.workType].qty += Number(e.quantity) || 0;
-    workTypeBreakdown[e.workType].count += 1;
+    workTypeBreakdown[wtKey].qty += Number(e.quantity) || 0;
+    workTypeBreakdown[wtKey].count += 1;
 
     // Worker breakdown
     const worker = e.userName || 'Unknown';
     if (!workerBreakdown[worker]) {
-      workerBreakdown[worker] = { totalEntries: 0, done: 0, pending: 0, meterQty: 0, numQty: 0 };
+      workerBreakdown[worker] = { totalEntries: 0, rectifyByUs: 0, rectifyByGenesis: 0, meterQty: 0, numQty: 0 };
     }
     workerBreakdown[worker].totalEntries += 1;
-    if (e.status === 'Done') workerBreakdown[worker].done += 1;
-    else workerBreakdown[worker].pending += 1;
+    if (e.status === 'Rectify by Genesis') workerBreakdown[worker].rectifyByGenesis += 1;
+    else workerBreakdown[worker].rectifyByUs += 1;
     if (e.uom === 'meter') workerBreakdown[worker].meterQty += Number(e.quantity) || 0;
     else workerBreakdown[worker].numQty += Number(e.quantity) || 0;
 
     // Date breakdown
     const { dateStr } = parseEntryDateTime(e);
     if (!dateBreakdown[dateStr]) {
-      dateBreakdown[dateStr] = { totalEntries: 0, done: 0, pending: 0, meterQty: 0, numQty: 0 };
+      dateBreakdown[dateStr] = { totalEntries: 0, rectifyByUs: 0, rectifyByGenesis: 0, meterQty: 0, numQty: 0 };
     }
     dateBreakdown[dateStr].totalEntries += 1;
-    if (e.status === 'Done') dateBreakdown[dateStr].done += 1;
-    else dateBreakdown[dateStr].pending += 1;
+    if (e.status === 'Rectify by Genesis') dateBreakdown[dateStr].rectifyByGenesis += 1;
+    else dateBreakdown[dateStr].rectifyByUs += 1;
     if (e.uom === 'meter') dateBreakdown[dateStr].meterQty += Number(e.quantity) || 0;
     else dateBreakdown[dateStr].numQty += Number(e.quantity) || 0;
   });
@@ -198,8 +199,8 @@ function computeSummary(entries: WorkEntry[]) {
     totalEntries: entries.length,
     totalMeterQty,
     totalNumberQty,
-    doneCount,
-    pendingCount,
+    rectifyByUsCount,
+    rectifyByGenesisCount,
     workTypeBreakdown,
     workerBreakdown,
     dateBreakdown,
@@ -283,8 +284,8 @@ export function exportCivilWorkToExcel(
       { 'METRIC': 'REPORT OVERVIEW', 'VALUE': '' },
       { 'METRIC': 'Report Generated At', 'VALUE': new Date().toLocaleString() },
       { 'METRIC': 'Total Work Entries Logged', 'VALUE': summary.totalEntries },
-      { 'METRIC': 'Completed Entries (Done)', 'VALUE': `${summary.doneCount} (${((summary.doneCount / summary.totalEntries) * 100).toFixed(1)}%)` },
-      { 'METRIC': 'Pending Entries', 'VALUE': `${summary.pendingCount} (${((summary.pendingCount / summary.totalEntries) * 100).toFixed(1)}%)` },
+      { 'METRIC': 'Rectify by us', 'VALUE': `${summary.rectifyByUsCount} (${((summary.rectifyByUsCount / summary.totalEntries) * 100).toFixed(1)}%)` },
+      { 'METRIC': 'Rectify by Genesis', 'VALUE': `${summary.rectifyByGenesisCount} (${((summary.rectifyByGenesisCount / summary.totalEntries) * 100).toFixed(1)}%)` },
       { 'METRIC': 'Total Linear Work (Meters)', 'VALUE': `${summary.totalMeterQty.toLocaleString()} m` },
       { 'METRIC': 'Total Item Work (Numbers)', 'VALUE': `${summary.totalNumberQty.toLocaleString()} Nos` },
       { 'METRIC': '', 'VALUE': '' },
@@ -307,11 +308,10 @@ export function exportCivilWorkToExcel(
       'Sr No': idx + 1,
       'Field Worker Name': workerName,
       'Total Logs': stats.totalEntries,
-      'Completed (Done)': stats.done,
-      'Pending': stats.pending,
+      'Rectify by us': stats.rectifyByUs,
+      'Rectify by Genesis': stats.rectifyByGenesis,
       'Total Meters (m)': stats.meterQty,
       'Total Numbers (Nos)': stats.numQty,
-      'Completion Rate': `${((stats.done / stats.totalEntries) * 100).toFixed(1)}%`,
     }));
 
     // Add totals row for worker sheet
@@ -320,11 +320,10 @@ export function exportCivilWorkToExcel(
         'Sr No': '' as any,
         'Field Worker Name': 'TOTAL TEAM SUMMARY',
         'Total Logs': summary.totalEntries,
-        'Completed (Done)': summary.doneCount,
-        'Pending': summary.pendingCount,
+        'Rectify by us': summary.rectifyByUsCount,
+        'Rectify by Genesis': summary.rectifyByGenesisCount,
         'Total Meters (m)': summary.totalMeterQty,
         'Total Numbers (Nos)': summary.totalNumberQty,
-        'Completion Rate': `${((summary.doneCount / summary.totalEntries) * 100).toFixed(1)}%`,
       });
     }
 
@@ -339,10 +338,10 @@ export function exportCivilWorkToExcel(
         'Sr No': idx + 1,
         'Date': date,
         'Total Logs': stats.totalEntries,
-        'Done Logs': stats.done,
-        'Pending Logs': stats.pending,
-        'Meters Done (m)': stats.meterQty,
-        'Numbers Done (Nos)': stats.numQty,
+        'Rectify by us': stats.rectifyByUs,
+        'Rectify by Genesis': stats.rectifyByGenesis,
+        'Meters (m)': stats.meterQty,
+        'Numbers (Nos)': stats.numQty,
       }));
 
     const wsDates = XLSX.utils.json_to_sheet(dateSheetData);
@@ -360,12 +359,12 @@ export function exportCivilWorkToExcel(
     const workerNames = Object.keys(summary.workerBreakdown);
 
     // Summary tab
-    const workerSheetData = workerNames.map(([workerName, stats]: any, idx) => ({
+    const workerSheetData = Object.entries(summary.workerBreakdown).map(([workerName, stats], idx) => ({
       'Sr No': idx + 1,
       'Field Worker Name': workerName,
       'Total Logs': stats.totalEntries,
-      'Done': stats.done,
-      'Pending': stats.pending,
+      'Rectify by us': stats.rectifyByUs,
+      'Rectify by Genesis': stats.rectifyByGenesis,
       'Total Meters (m)': stats.meterQty,
       'Total Numbers (Nos)': stats.numQty,
     }));
@@ -393,8 +392,8 @@ export function exportCivilWorkToExcel(
         'Sr No': idx + 1,
         'Date': d,
         'Total Entries': stats.totalEntries,
-        'Done': stats.done,
-        'Pending': stats.pending,
+        'Rectify by us': stats.rectifyByUs,
+        'Rectify by Genesis': stats.rectifyByGenesis,
         'Meters': stats.meterQty,
         'Numbers': stats.numQty,
       };

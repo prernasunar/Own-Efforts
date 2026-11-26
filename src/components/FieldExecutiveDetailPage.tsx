@@ -17,6 +17,8 @@ import {
   ClipboardList,
   ChevronRight,
   Mail,
+  Wrench,
+  Building2,
 } from 'lucide-react';
 import { exportCivilWorkToExcel } from '../utils/excelExporter';
 import { exportCivilWorkToPpt } from '../utils/pptExporter';
@@ -107,7 +109,7 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
 }) => {
   const [dateFilter, setDateFilter] = useState<'ALL' | 'TODAY' | 'CUSTOM'>('ALL');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Done'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Rectify by us' | 'Rectify by Genesis'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPpt, setExportingPpt] = useState(false);
@@ -126,10 +128,10 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
   const stats = useMemo(() => {
     const total = workerEntries.length;
     const today = workerEntries.filter(isEntryToday).length;
-    const done = workerEntries.filter((e) => e.status === 'Done').length;
-    const pending = workerEntries.filter((e) => e.status === 'Pending').length;
+    const rectifyByUs = workerEntries.filter((e) => e.status === 'Rectify by us').length;
+    const rectifyByGenesis = workerEntries.filter((e) => e.status === 'Rectify by Genesis').length;
     const totalPhotos = workerEntries.reduce((acc, e) => acc + (e.photos?.length || 0), 0);
-    return { total, today, done, pending, totalPhotos };
+    return { total, today, rectifyByUs, rectifyByGenesis, totalPhotos };
   }, [workerEntries]);
 
   const filteredEntries = useMemo(() => {
@@ -345,31 +347,31 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
 
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === 'Done' ? 'ALL' : 'Done')}
+            onClick={() => setStatusFilter(statusFilter === 'Rectify by us' ? 'ALL' : 'Rectify by us')}
             className={`p-3.5 sm:p-4 rounded-xl border text-left transition-colors cursor-pointer ${
-              statusFilter === 'Done'
-                ? 'bg-emerald-50 border-emerald-500'
+              statusFilter === 'Rectify by us'
+                ? 'bg-amber-50 border-amber-500'
                 : 'bg-stone-50 border-stone-200 hover:bg-stone-100'
             }`}
           >
-            <span className="text-xs font-medium text-emerald-700 block">Completed (Done)</span>
-            <span className="text-xl sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums mt-1 block">
-              {stats.done}
+            <span className="text-xs font-medium text-amber-700 block">Rectify by us</span>
+            <span className="text-xl sm:text-2xl font-bold text-amber-700 font-mono tabular-nums mt-1 block">
+              {stats.rectifyByUs}
             </span>
           </button>
 
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === 'Pending' ? 'ALL' : 'Pending')}
+            onClick={() => setStatusFilter(statusFilter === 'Rectify by Genesis' ? 'ALL' : 'Rectify by Genesis')}
             className={`p-3.5 sm:p-4 rounded-xl border text-left transition-colors cursor-pointer ${
-              statusFilter === 'Pending'
-                ? 'bg-amber-50 border-amber-500'
+              statusFilter === 'Rectify by Genesis'
+                ? 'bg-emerald-50 border-emerald-500'
                 : 'bg-stone-50 border-stone-200 hover:bg-stone-100'
             }`}
           >
-            <span className="text-xs font-medium text-amber-700 block">Pending Work</span>
-            <span className="text-xl sm:text-2xl font-bold text-amber-700 font-mono tabular-nums mt-1 block">
-              {stats.pending}
+            <span className="text-xs font-medium text-emerald-700 block">Rectify by Genesis</span>
+            <span className="text-xl sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums mt-1 block">
+              {stats.rectifyByGenesis}
             </span>
           </button>
         </div>
@@ -427,25 +429,25 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('Pending')}
-              className={`flex-1 lg:flex-initial min-h-[34px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                statusFilter === 'Pending'
+              onClick={() => setStatusFilter('Rectify by us')}
+              className={`flex-1 lg:flex-initial min-h-[34px] px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                statusFilter === 'Rectify by us'
                   ? 'bg-amber-600 text-white shadow-2xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              Pending ({stats.pending})
+              Rectify by us ({stats.rectifyByUs})
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('Done')}
-              className={`flex-1 lg:flex-initial min-h-[34px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                statusFilter === 'Done'
+              onClick={() => setStatusFilter('Rectify by Genesis')}
+              className={`flex-1 lg:flex-initial min-h-[34px] px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                statusFilter === 'Rectify by Genesis'
                   ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              Done ({stats.done})
+              Rectify by Genesis ({stats.rectifyByGenesis})
             </button>
           </div>
 
@@ -497,7 +499,7 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
         ) : (
           <div className="space-y-3">
             {filteredEntries.map((entry) => {
-              const isDone = entry.status === 'Done';
+              const isGenesis = entry.status === 'Rectify by Genesis';
               const photos = entry.photos || [];
               const formattedTime = entry.createdAt?.toDate
                 ? entry.createdAt.toDate().toLocaleString('en-US', {
@@ -530,18 +532,18 @@ export const FieldExecutiveDetailPage: React.FC<FieldExecutiveDetailPageProps> =
                         <span aria-hidden="true" className="text-stone-300">·</span>
                         <span
                           className={`inline-flex items-center gap-1 font-semibold ${
-                            isDone ? 'text-emerald-700' : 'text-amber-700'
+                            isGenesis ? 'text-emerald-700' : 'text-amber-700'
                           }`}
                         >
-                          {isDone ? (
+                          {isGenesis ? (
                             <>
-                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Done</span>
+                              <Building2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>Rectify by Genesis</span>
                             </>
                           ) : (
                             <>
-                              <Clock className="w-3.5 h-3.5 shrink-0" />
-                              <span>Pending</span>
+                              <Wrench className="w-3.5 h-3.5 shrink-0" />
+                              <span>Rectify by us</span>
                             </>
                           )}
                         </span>

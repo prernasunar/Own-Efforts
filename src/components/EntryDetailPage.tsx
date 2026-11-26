@@ -22,6 +22,8 @@ import {
   Trash2,
   Layers,
   Presentation,
+  Wrench,
+  Building2,
 } from 'lucide-react';
 import { downloadPhoto, downloadAllPhotos } from '../utils/imageUtils';
 import { exportSingleEntryToPpt } from '../utils/pptExporter';
@@ -81,7 +83,7 @@ export const EntryDetailPage: React.FC<EntryDetailPageProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lightboxOpen, onBack, photos.length]);
 
-  const isDone = entry.status === 'Done';
+  const isGenesis = entry.status === 'Rectify by Genesis';
   const displayTitle = entry.route || entry.workType || 'Site Work Log';
 
   const formattedLoggedTime = entry.createdAt?.toDate
@@ -354,18 +356,18 @@ export const EntryDetailPage: React.FC<EntryDetailPageProps> = ({
                 <span aria-hidden="true">·</span>
                 <span
                   className={`inline-flex items-center gap-1 font-semibold ${
-                    isDone ? 'text-emerald-700' : 'text-amber-700'
+                    isGenesis ? 'text-emerald-700' : 'text-amber-700'
                   }`}
                 >
-                  {isDone ? (
+                  {isGenesis ? (
                     <>
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Completed (Done)</span>
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>Rectify by Genesis</span>
                     </>
                   ) : (
                     <>
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Pending</span>
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Rectify by us</span>
                     </>
                   )}
                 </span>
@@ -479,7 +481,7 @@ export const EntryDetailPage: React.FC<EntryDetailPageProps> = ({
               </span>
               <span
                 className={`font-semibold ${
-                  isDone ? 'text-emerald-700' : 'text-amber-700'
+                  isGenesis ? 'text-emerald-700' : 'text-amber-700'
                 }`}
               >
                 Status: {entry.status}

@@ -19,7 +19,13 @@ export interface WorkTypeItem {
   createdAt?: any;
 }
 
-export type EntryStatus = 'Pending' | 'Done';
+export type EntryStatus = 'Rectify by us' | 'Rectify by Genesis';
+
+export function normalizeEntryStatus(status?: string | null): EntryStatus {
+  if (status === 'Rectify by us' || status === 'Pending') return 'Rectify by us';
+  if (status === 'Rectify by Genesis' || status === 'Done') return 'Rectify by Genesis';
+  return 'Rectify by us';
+}
 
 export interface WorkEntry {
   id: string;

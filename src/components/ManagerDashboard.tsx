@@ -19,6 +19,8 @@ import {
   Presentation,
   ChevronRight,
   Globe,
+  Wrench,
+  Building2,
 } from 'lucide-react';
 import { formatSingleEntryText, formatTeamReportText } from '../utils/share';
 import { ShareModal } from './ShareModal';
@@ -102,7 +104,7 @@ export const ManagerDashboard: React.FC = () => {
   const [selectedWorker, setSelectedWorker] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState<string>('ALL'); // 'ALL', 'TODAY', 'CUSTOM'
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL', 'Pending', 'Done'
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL', 'Rectify by us', 'Rectify by Genesis'
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Modals State
@@ -147,8 +149,8 @@ export const ManagerDashboard: React.FC = () => {
           (e) => (e.userName || '').trim().toLowerCase() === cleanName
         );
         const totalEntries = workerEntries.length;
-        const doneEntries = workerEntries.filter((e) => e.status === 'Done').length;
-        const pendingEntries = workerEntries.filter((e) => e.status === 'Pending').length;
+        const rectifyByUsEntries = workerEntries.filter((e) => e.status === 'Rectify by us').length;
+        const rectifyByGenesisEntries = workerEntries.filter((e) => e.status === 'Rectify by Genesis').length;
         const todayEntries = workerEntries.filter(isEntryToday);
 
         const registeredProfile = teamWorkers.find(
@@ -163,8 +165,8 @@ export const ManagerDashboard: React.FC = () => {
           email: registeredProfile?.email || `${cleanName.replace(/\s+/g, '.')}@site.work`,
           role: registeredProfile?.role || 'Field Executive',
           totalEntries,
-          doneEntries,
-          pendingEntries,
+          rectifyByUsEntries,
+          rectifyByGenesisEntries,
           activeToday,
           todayCount: todayEntries.length,
         };
@@ -181,13 +183,13 @@ export const ManagerDashboard: React.FC = () => {
     const todayEntries = entries.filter(isEntryToday);
     const totalToday = todayEntries.length;
     const totalAll = entries.length;
-    const totalPending = entries.filter((e) => e.status === 'Pending').length;
-    const totalDone = entries.filter((e) => e.status === 'Done').length;
+    const totalRectifyByUs = entries.filter((e) => e.status === 'Rectify by us').length;
+    const totalRectifyByGenesis = entries.filter((e) => e.status === 'Rectify by Genesis').length;
     const workersToday = new Set(
       todayEntries.map((e) => (e.userName || '').trim().toLowerCase()).filter(Boolean)
     ).size;
 
-    return { totalAll, totalToday, totalPending, totalDone, workersToday };
+    return { totalAll, totalToday, totalRectifyByUs, totalRectifyByGenesis, workersToday };
   }, [entries]);
 
   // Filtered entries calculation
@@ -481,34 +483,34 @@ export const ManagerDashboard: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setSelectedStatus(selectedStatus === 'Done' ? 'ALL' : 'Done')}
+            onClick={() => setSelectedStatus(selectedStatus === 'Rectify by us' ? 'ALL' : 'Rectify by us')}
             className={`p-3.5 sm:p-4 rounded-xl border text-left transition-colors cursor-pointer ${
-              selectedStatus === 'Done'
-                ? 'bg-emerald-50 border-emerald-500'
-                : 'bg-stone-50 border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            <span className="text-xs font-medium text-emerald-700 block">Completed (Done)</span>
-            <span className="text-xl sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums mt-1 block">
-              {summaryMetrics.totalDone}
-            </span>
-            <span className="text-[11px] text-stone-500 mt-0.5 block truncate">Verified site tasks</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedStatus(selectedStatus === 'Pending' ? 'ALL' : 'Pending')}
-            className={`p-3.5 sm:p-4 rounded-xl border text-left transition-colors cursor-pointer ${
-              selectedStatus === 'Pending'
+              selectedStatus === 'Rectify by us'
                 ? 'bg-amber-50 border-amber-500'
                 : 'bg-stone-50 border-stone-200 hover:bg-stone-100'
             }`}
           >
-            <span className="text-xs font-medium text-amber-700 block">Pending Tasks</span>
+            <span className="text-xs font-medium text-amber-700 block">Rectify by us</span>
             <span className="text-xl sm:text-2xl font-bold text-amber-700 font-mono tabular-nums mt-1 block">
-              {summaryMetrics.totalPending}
+              {summaryMetrics.totalRectifyByUs}
             </span>
-            <span className="text-[11px] text-stone-500 mt-0.5 block truncate">Work in progress</span>
+            <span className="text-[11px] text-stone-500 mt-0.5 block truncate">Site team rectification</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus(selectedStatus === 'Rectify by Genesis' ? 'ALL' : 'Rectify by Genesis')}
+            className={`p-3.5 sm:p-4 rounded-xl border text-left transition-colors cursor-pointer ${
+              selectedStatus === 'Rectify by Genesis'
+                ? 'bg-emerald-50 border-emerald-500'
+                : 'bg-stone-50 border-stone-200 hover:bg-stone-100'
+            }`}
+          >
+            <span className="text-xs font-medium text-emerald-700 block">Rectify by Genesis</span>
+            <span className="text-xl sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums mt-1 block">
+              {summaryMetrics.totalRectifyByGenesis}
+            </span>
+            <span className="text-[11px] text-stone-500 mt-0.5 block truncate">Genesis rectification</span>
           </button>
         </div>
       </div>
@@ -580,9 +582,9 @@ export const ManagerDashboard: React.FC = () => {
                     </div>
                     <span aria-hidden="true" className="text-stone-300">·</span>
                     <div>
-                      <span className="text-stone-500 block font-sans text-[11px]">Done / Pend</span>
+                      <span className="text-stone-500 block font-sans text-[11px]">Us / Genesis</span>
                       <span className="font-bold text-stone-900 text-sm">
-                        {w.doneEntries} / {w.pendingEntries}
+                        {w.rectifyByUsEntries} / {w.rectifyByGenesisEntries}
                       </span>
                     </div>
                   </div>
@@ -670,25 +672,25 @@ export const ManagerDashboard: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedStatus('Pending')}
-                className={`flex-1 lg:flex-initial min-h-[34px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  selectedStatus === 'Pending'
+                onClick={() => setSelectedStatus('Rectify by us')}
+                className={`flex-1 lg:flex-initial min-h-[34px] px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  selectedStatus === 'Rectify by us'
                     ? 'bg-amber-600 text-white shadow-2xs'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Pending
+                Rectify by us
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedStatus('Done')}
-                className={`flex-1 lg:flex-initial min-h-[34px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  selectedStatus === 'Done'
+                onClick={() => setSelectedStatus('Rectify by Genesis')}
+                className={`flex-1 lg:flex-initial min-h-[34px] px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  selectedStatus === 'Rectify by Genesis'
                     ? 'bg-emerald-600 text-white shadow-2xs'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Done
+                Rectify by Genesis
               </button>
             </div>
 
@@ -752,7 +754,7 @@ export const ManagerDashboard: React.FC = () => {
                   })
                 : entry.date || 'Just now';
 
-              const isDone = entry.status === 'Done';
+              const isGenesis = entry.status === 'Rectify by Genesis';
               const photos = entry.photos || [];
 
               return (
@@ -789,18 +791,18 @@ export const ManagerDashboard: React.FC = () => {
                         <span aria-hidden="true" className="text-stone-300">·</span>
                         <span
                           className={`inline-flex items-center gap-1 font-semibold ${
-                            isDone ? 'text-emerald-700' : 'text-amber-700'
+                            isGenesis ? 'text-emerald-700' : 'text-amber-700'
                           }`}
                         >
-                          {isDone ? (
+                          {isGenesis ? (
                             <>
-                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Done</span>
+                              <Building2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>Rectify by Genesis</span>
                             </>
                           ) : (
                             <>
-                              <Clock className="w-3.5 h-3.5 shrink-0" />
-                              <span>Pending</span>
+                              <Wrench className="w-3.5 h-3.5 shrink-0" />
+                              <span>Rectify by us</span>
                             </>
                           )}
                         </span>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { WorkEntry, EntryStatus, WorkTypeItem } from '../types';
-import { X, CheckCircle2, Clock, MapPin, Loader2, Sparkles, Navigation, Calendar } from 'lucide-react';
+import { X, Building2, Wrench, Clock, MapPin, Loader2, Sparkles, Navigation, Calendar } from 'lucide-react';
 import { captureCurrentLocation } from '../utils/geo';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoLightbox } from './PhotoLightbox';
@@ -268,33 +268,33 @@ export const EditEntryModal: React.FC<EditEntryModalProps> = ({
           {/* 6. Status */}
           <div>
             <label className="block text-xs font-bold text-stone-700 mb-1">
-              Status
+              Work Status
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setStatus('Pending')}
-                className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center space-x-1.5 transition-all ${
-                  status === 'Pending'
-                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-black'
+                onClick={() => setStatus('Rectify by us')}
+                className={`py-2.5 px-3 rounded-xl border font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                  status === 'Rectify by us'
+                    ? 'border-amber-500 bg-amber-50 text-amber-950 font-black'
                     : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
                 }`}
               >
-                <Clock className="w-3.5 h-3.5 text-orange-600" />
-                <span>⏳ Pending</span>
+                <Wrench className={`w-3.5 h-3.5 shrink-0 ${status === 'Rectify by us' ? 'text-amber-600' : 'text-stone-400'}`} />
+                <span>Rectify by us</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setStatus('Done')}
-                className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center space-x-1.5 transition-all ${
-                  status === 'Done'
+                onClick={() => setStatus('Rectify by Genesis')}
+                className={`py-2.5 px-3 rounded-xl border font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                  status === 'Rectify by Genesis'
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-black'
                     : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
                 }`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>✅ Done</span>
+                <Building2 className={`w-3.5 h-3.5 shrink-0 ${status === 'Rectify by Genesis' ? 'text-emerald-600' : 'text-stone-400'}`} />
+                <span>Rectify by Genesis</span>
               </button>
             </div>
           </div>

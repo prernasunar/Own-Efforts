@@ -9,7 +9,7 @@ export interface PptExportOptions {
   customDate?: string; // YYYY-MM-DD
   startDate?: string;  // YYYY-MM-DD
   endDate?: string;    // YYYY-MM-DD
-  statusFilter?: 'ALL' | 'Pending' | 'Done';
+  statusFilter?: 'ALL' | 'Rectify by us' | 'Rectify by Genesis';
   includeSummarySlide?: boolean;
 }
 
@@ -79,7 +79,7 @@ function addEntrySlide(pptx: PptxGenJS, entry: WorkEntry, index: number, total: 
   slide.background = { color: 'F5F5F4' }; // Stone-100 background
 
   const { dateStr, timeStr } = parseEntryDateTime(entry);
-  const isDone = entry.status === 'Done';
+  const isGenesis = entry.status === 'Rectify by Genesis';
   const titleText = entry.route || entry.workType || 'Civil Site Work Log';
   const photos = (entry.photos || []).filter(Boolean);
 
@@ -128,20 +128,20 @@ function addEntrySlide(pptx: PptxGenJS, entry: WorkEntry, index: number, total: 
 
   // Status Badge in Header Right
   slide.addShape(pptx.ShapeType.roundRect, {
-    x: 8.15,
+    x: 7.75,
     y: 0.16,
-    w: 1.55,
+    w: 1.95,
     h: 0.4,
-    fill: { color: isDone ? '059669' : 'EA580C' },
+    fill: { color: isGenesis ? '059669' : 'EA580C' },
     rectRadius: 0.08,
   });
 
-  slide.addText(isDone ? 'STATUS: DONE' : 'STATUS: PENDING', {
-    x: 8.15,
+  slide.addText(isGenesis ? 'RECTIFY BY GENESIS' : 'RECTIFY BY US', {
+    x: 7.75,
     y: 0.16,
-    w: 1.55,
+    w: 1.95,
     h: 0.4,
-    fontSize: 10,
+    fontSize: 9,
     bold: true,
     color: 'FFFFFF',
     align: 'center',
@@ -364,15 +364,15 @@ export async function exportCivilWorkToPpt(
   // Calculate summary stats
   let totalMeters = 0;
   let totalNos = 0;
-  let doneCount = 0;
-  let pendingCount = 0;
+  let rectifyByUsCount = 0;
+  let rectifyByGenesisCount = 0;
   const workerSet = new Set<string>();
 
   filtered.forEach((e) => {
     if (e.uom === 'meter') totalMeters += Number(e.quantity) || 0;
     else totalNos += Number(e.quantity) || 0;
-    if (e.status === 'Done') doneCount++;
-    else pendingCount++;
+    if (e.status === 'Rectify by Genesis') rectifyByGenesisCount++;
+    else rectifyByUsCount++;
     if (e.userName) workerSet.add(e.userName.trim());
   });
 
@@ -434,7 +434,7 @@ export async function exportCivilWorkToPpt(
       { label: 'TOTAL FIELD LOGS', value: `${filtered.length}`, sub: `${workerSet.size} Executive(s)`, color: '1C1917' },
       { label: 'TOTAL METERS (m)', value: `${totalMeters.toLocaleString()} m`, sub: 'Linear Progress', color: 'B45309' },
       { label: 'TOTAL UNITS (Nos)', value: `${totalNos.toLocaleString()} Nos`, sub: 'Discrete Installations', color: '334155' },
-      { label: 'COMPLETION STATUS', value: `${doneCount} Done`, sub: `${pendingCount} Pending`, color: '059669' },
+      { label: 'WORK STATUS', value: `${rectifyByUsCount} Us`, sub: `${rectifyByGenesisCount} Genesis`, color: '059669' },
     ];
 
     metrics.forEach((m, idx) => {
@@ -507,9 +507,9 @@ export async function exportCivilWorkToPpt(
           text: entry.status,
           options: {
             fill: { color: rowFill },
-            fontSize: 8.5,
+            fontSize: 8,
             bold: true,
-            color: entry.status === 'Done' ? '059669' : 'EA580C',
+            color: entry.status === 'Rectify by Genesis' ? '059669' : 'EA580C',
           },
         },
         { text: `${(entry.photos || []).length}`, options: { fill: { color: rowFill }, fontSize: 8.5, color: '44403C' } },
@@ -520,7 +520,7 @@ export async function exportCivilWorkToPpt(
       x: 0.35,
       y: 2.28,
       w: 9.3,
-      colW: [0.45, 1.15, 1.85, 3.25, 0.95, 0.9, 0.75],
+      colW: [0.45, 1.1, 1.75, 2.95, 0.9, 1.4, 0.75],
       border: { type: 'solid', color: 'D6D3D1', pt: 0.5 },
       fontFace: 'Arial',
       valign: 'middle',
